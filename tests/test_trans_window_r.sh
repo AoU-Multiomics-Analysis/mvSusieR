@@ -9,6 +9,8 @@ Rscript tests/test_build_trans_window_tensorqtl.R scripts/build_trans_window_ten
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/trans-window-r.XXXXXX")"
 trap 'rm -rf "$tmp_dir"' EXIT
 
+Rscript tests/test_trans_window_cli.R
+
 reader_dir="$tmp_dir/reader"
 Rscript tests/fixtures/trans_window/generate_reader_fixture.R "$reader_dir"
 Rscript tests/test_trans_window_r.R "$reader_dir"
