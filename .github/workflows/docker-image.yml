@@ -1,44 +1,75 @@
-name: Docker Image CI
+name: LD-pruning container
 
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: [main]
     paths:
       - ".github/workflows/docker-image.yml"
-      - "envs/Dockerfile"
-      - "scripts/**"
+      - "envs/ld-pruning.Dockerfile"
+      - "workflows/ld_pruning.wdl"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/docker-image.yml"
+      - "envs/ld-pruning.Dockerfile"
+      - "workflows/ld_pruning.wdl"
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/mvsusier-ld-pruning
 
 jobs:
-  build_and_push:
+  build-test-publish:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
     steps:
-      - name: Checkout the code
+      - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Log in to ghcr.io with docker
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{github.repository_owner}}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/${{ github.repository }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
 
-      - name: Build and push docker containers
+      - name: Build image for smoke test
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./envs/Dockerfile
-          push: False 
+          file: ./envs/ld-pruning.Dockerfile
+          load: true
+          push: false
+          tags: ld-pruning-ci:latest
+
+      - name: Verify PLINK 2
+        run: docker run --rm ld-pruning-ci:latest plink2 --version
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        if: github.event_name != 'pull_request'
+        id: metadata
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            ${{ steps.meta.outputs.tags }}
+            type=ref,event=branch
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Publish image
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./envs/ld-pruning.Dockerfile
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}

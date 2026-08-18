@@ -3,3 +3,6 @@ workflows:
   - name: trans-window-mvsusie
     subclass: WDL
     primaryDescriptorPath: /workflows/trans_window_mvsusie.wdl
+  - name: ld-pruning
+    subclass: WDL
+    primaryDescriptorPath: /workflows/ld_pruning.wdl
