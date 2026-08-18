@@ -97,5 +97,6 @@ task LDPruningTask {
     docker: "ghcr.io/aou-multiomics-analysis/mvsusier-ld-pruning:latest"
     cpu: 2
     memory: "64 GiB"
+    disks: "local-disk 500 HDD"
   }
 }
