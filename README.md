@@ -48,7 +48,7 @@ Run locally with:
 miniwdl run workflows/trans_window_mvsusie.wdl -i trans_window.inputs.json
 ```
 
-The WDL declares a future container runtime image, but this repository slice does not build or publish that image yet.
+The model WDL still declares a future runtime image. The two preparation images are built and published to GHCR by the `prepare-window-genotypes-image` and `prepare-window-phenotypes-image` GitHub Actions workflows.
 
 ### Model defaults and behavior
 
