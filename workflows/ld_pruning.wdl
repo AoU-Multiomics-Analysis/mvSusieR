@@ -5,6 +5,7 @@ workflow LDPruning {
     File input_pgen
     File input_pvar
     File input_psam
+    String output_prefix = "ld_pruning"
     File? keep_samples
     File? exclude_variants
     Float maf = 0.05
@@ -19,6 +20,7 @@ workflow LDPruning {
       input_pgen = input_pgen,
       input_pvar = input_pvar,
       input_psam = input_psam,
+      output_prefix = output_prefix,
       keep_samples = keep_samples,
       exclude_variants = exclude_variants,
       maf = maf,
@@ -43,6 +45,7 @@ task LDPruningTask {
     File input_pgen
     File input_pvar
     File input_psam
+    String output_prefix
     File? keep_samples
     File? exclude_variants
     Float maf
@@ -68,26 +71,26 @@ task LDPruningTask {
       ~{if defined(keep_samples) then "--keep " + select_first([keep_samples]) else ""} \
       ~{if defined(exclude_variants) then "--exclude " + select_first([exclude_variants]) else ""} \
       --indep-pairwise ~{ld_window_kb}kb ~{ld_step_variants} ~{ld_r2} \
-      --out ld_pruning
+      --out ~{output_prefix}
 
-    test -s ld_pruning.prune.in
+    test -s ~{output_prefix}.prune.in
 
     plink2 \
       --pfile input \
       ~{if defined(keep_samples) then "--keep " + select_first([keep_samples]) else ""} \
-      --extract ld_pruning.prune.in \
+      --extract ~{output_prefix}.prune.in \
       --make-pgen \
       --write-snplist \
-      --out ld_pruned
+      --out ~{output_prefix}.pruned
   >>>
 
   output {
-    File pruned_variants = "ld_pruning.prune.in"
-    File excluded_variants = "ld_pruning.prune.out"
-    File pruned_pgen = "ld_pruned.pgen"
-    File pruned_pvar = "ld_pruned.pvar"
-    File pruned_psam = "ld_pruned.psam"
-    File retained_variant_ids = "ld_pruned.snplist"
+    File pruned_variants = output_prefix + ".prune.in"
+    File excluded_variants = output_prefix + ".prune.out"
+    File pruned_pgen = output_prefix + ".pruned.pgen"
+    File pruned_pvar = output_prefix + ".pruned.pvar"
+    File pruned_psam = output_prefix + ".pruned.psam"
+    File retained_variant_ids = output_prefix + ".pruned.snplist"
   }
 
   runtime {

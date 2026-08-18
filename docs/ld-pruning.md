@@ -21,6 +21,7 @@ successful push to `main`.
 | `input_pgen` | Yes | — | PLINK 2 genotype file. |
 | `input_pvar` | Yes | — | Matching PLINK 2 variant file. |
 | `input_psam` | Yes | — | Matching PLINK 2 sample file. |
+| `output_prefix` | No | `ld_pruning` | Prefix for all output files. |
 | `keep_samples` | No | — | PLINK two-column sample list passed to `--keep`. |
 | `exclude_variants` | No | — | Variant-ID list passed to `--exclude`. |
 | `maf` | No | `0.05` | Minimum minor-allele frequency. |
@@ -38,7 +39,8 @@ with your PGEN, PVAR, and PSAM paths.
 {
   "LDPruning.input_pgen": "gs://example-bucket/genotypes.pgen",
   "LDPruning.input_pvar": "gs://example-bucket/genotypes.pvar",
-  "LDPruning.input_psam": "gs://example-bucket/genotypes.psam"
+  "LDPruning.input_psam": "gs://example-bucket/genotypes.psam",
+  "LDPruning.output_prefix": "genomewide_mash_sentinels"
 }
 ```
 
@@ -50,8 +52,9 @@ miniwdl run workflows/ld_pruning.wdl -i ld_pruning.inputs.json
 
 ## Outputs
 
-- `pruned_variants`: retained variant IDs (`ld_pruning.prune.in`).
-- `excluded_variants`: IDs removed during LD pruning (`ld_pruning.prune.out`).
+- `pruned_variants`: retained variant IDs (`<output_prefix>.prune.in`).
+- `excluded_variants`: IDs removed during LD pruning (`<output_prefix>.prune.out`).
 - `pruned_pgen`, `pruned_pvar`, `pruned_psam`: compact PLINK 2 dataset for
-  the retained variants.
-- `retained_variant_ids`: retained IDs written by `plink2 --write-snplist`.
+  the retained variants (`<output_prefix>.pruned.*`).
+- `retained_variant_ids`: retained IDs written by `plink2 --write-snplist`
+  (`<output_prefix>.pruned.snplist`).
