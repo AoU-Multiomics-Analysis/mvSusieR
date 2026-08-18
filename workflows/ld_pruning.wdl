@@ -94,8 +94,8 @@ task LDPruningTask {
   }
 
   runtime {
-    docker: "ghcr.io/evin-padhi/mvsusier-ld-pruning:latest"
+    docker: "ghcr.io/aou-multiomics-analysis/mvsusier-ld-pruning:latest"
     cpu: 2
-    memory: "8 GiB"
+    memory: "64 GiB"
   }
 }

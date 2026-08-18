@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add a containerized, Dockstore-discoverable PLINK 2 LD-pruning workflow to `evin-padhi/mvSusieR` for making reproducible genome-wide sentinel variant sets.
+Add a containerized, Dockstore-discoverable PLINK 2 LD-pruning workflow to `AoU-Multiomics-Analysis/mvSusieR` for making reproducible genome-wide sentinel variant sets.
 
 ## Workflow interface
 
@@ -12,7 +12,7 @@ The task stages the three inputs under a fixed local PLINK prefix, runs `plink2 
 
 ## Container
 
-`envs/ld-pruning.Dockerfile` supplies a pinned PLINK 2 release on Ubuntu and sets standard OCI labels. The source label points at this repository so GitHub links the published image to `mvSusieR`. The image name is `ghcr.io/evin-padhi/mvsusier-ld-pruning`.
+`envs/ld-pruning.Dockerfile` supplies a pinned PLINK 2 release on Ubuntu and sets standard OCI labels. The source label points at this repository so GitHub links the published image to `mvSusieR`. The image name is `ghcr.io/aou-multiomics-analysis/mvsusier-ld-pruning`.
 
 ## Automation
 

@@ -4,7 +4,7 @@ ARG PLINK2_DATE=20260818
 
 LABEL org.opencontainers.image.title="mvSusieR LD pruning" \
       org.opencontainers.image.description="PLINK 2 container for the mvSusieR LD-pruning workflow" \
-      org.opencontainers.image.source="https://github.com/evin-padhi/mvSusieR" \
+      org.opencontainers.image.source="https://github.com/AoU-Multiomics-Analysis/mvSusieR" \
       org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 RUN apt-get update \

@@ -14,9 +14,9 @@
 
 - Inputs are explicit PGEN, PVAR, and PSAM files; callers never supply a shared prefix.
 - Defaults are MAF 0.05, genotype missingness 0.01, and 1000 kb / 50 variants / r2 0.1 pruning.
-- The OCI source label is `https://github.com/evin-padhi/mvSusieR`.
+- The OCI source label is `https://github.com/AoU-Multiomics-Analysis/mvSusieR`.
 - Images publish only on `main` or manual dispatch, never on pull requests.
-- The GHCR image is `ghcr.io/evin-padhi/mvsusier-ld-pruning`.
+- The GHCR image is `ghcr.io/aou-multiomics-analysis/mvsusier-ld-pruning`.
 
 ---
 
@@ -128,7 +128,7 @@ Expected: failure because the existing Dockstore descriptor uses a placeholder p
 
 - [ ] **Step 3: Write minimal workflow and metadata changes**
 
-Update `docker-image.yml` to build `envs/ld-pruning.Dockerfile`, tag `ghcr.io/evin-padhi/mvsusier-ld-pruning`, run `plink2 --version`, and condition `push` on `main` or manual dispatch. Replace `.dockstore.yml` with an `ld-pruning` WDL declaration whose descriptor path is `/workflows/ld_pruning.wdl`.
+Update `docker-image.yml` to build `envs/ld-pruning.Dockerfile`, tag `ghcr.io/aou-multiomics-analysis/mvsusier-ld-pruning`, run `plink2 --version`, and condition `push` on `main` or manual dispatch. Replace `.dockstore.yml` with an `ld-pruning` WDL declaration whose descriptor path is `/workflows/ld_pruning.wdl`.
 
 - [ ] **Step 4: Verify the tests pass**
 

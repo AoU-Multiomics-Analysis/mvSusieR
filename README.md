@@ -61,7 +61,7 @@ The workflow emits per-window prepared data, fit RDS files, variant PIP tables, 
 `workflows/ld_pruning.wdl` creates an LD-pruned sentinel-variant set with
 PLINK 2 from explicit PGEN, PVAR, and PSAM inputs.
 
-The container is published as `ghcr.io/evin-padhi/mvsusier-ld-pruning` after a
+The container is published as `ghcr.io/aou-multiomics-analysis/mvsusier-ld-pruning` after a
 successful push to `main`.
 
 See [the LD-pruning guide](docs/ld-pruning.md) for inputs, a MiniWDL example,

@@ -10,7 +10,7 @@ retained and extracts the retained IDs into a compact PGEN/PVAR/PSAM dataset.
 
 ## Container
 
-The task runs in `ghcr.io/evin-padhi/mvsusier-ld-pruning`. The GitHub Action
+The task runs in `ghcr.io/aou-multiomics-analysis/mvsusier-ld-pruning`. The GitHub Action
 builds and smoke-tests this image for pull requests, and publishes it after a
 successful push to `main`.
 
