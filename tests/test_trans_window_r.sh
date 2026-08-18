@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+Rscript tests/test_trans_window_r.R
+
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/trans-window-r.XXXXXX")"
+trap 'rm -rf "$tmp_dir"' EXIT
+
+input_dir="$tmp_dir/input"
+Rscript tests/fixtures/trans_window/generate_model_fixture.R "$input_dir"
+
+Rscript scripts/prepare_window.R \
+  --windows "$input_dir/windows.tsv" \
+  --window-phenotypes "$input_dir/window_phenotypes.tsv" \
+  --window-id w1 \
+  --dosage "$input_dir/model_dosage.tsv" \
+  --phenotype-files "$input_dir/model_expression.tsv,$input_dir/model_splicing.tsv,$input_dir/model_isoform.tsv" \
+  --covariate-files "$input_dir/model_covariates.tsv" \
+  --output "$tmp_dir/prepared_window.rds"
+
+Rscript scripts/fit_window.R \
+  --prepared "$tmp_dir/prepared_window.rds" \
+  --output "$tmp_dir/mvsusie_fit.rds"
+
+Rscript scripts/summarize_window.R \
+  --prepared "$tmp_dir/prepared_window.rds" \
+  --fit "$tmp_dir/mvsusie_fit.rds" \
+  --output-dir "$tmp_dir/window"
+
+Rscript scripts/merge_window_outputs.R \
+  --variant-pips "$tmp_dir/window/variant_pip.tsv.gz" \
+  --credible-sets "$tmp_dir/window/credible_sets.tsv.gz" \
+  --component-effects "$tmp_dir/window/component_effects.tsv.gz" \
+  --window-qc "$tmp_dir/window/window_qc.tsv" \
+  --output-dir "$tmp_dir/merged"
+
+for output in \
+  "$tmp_dir/prepared_window.rds" \
+  "$tmp_dir/mvsusie_fit.rds" \
+  "$tmp_dir/window/variant_pip.tsv.gz" \
+  "$tmp_dir/window/credible_sets.tsv.gz" \
+  "$tmp_dir/window/component_effects.tsv.gz" \
+  "$tmp_dir/window/window_qc.tsv" \
+  "$tmp_dir/merged/variant_pip.tsv.gz" \
+  "$tmp_dir/merged/credible_sets.tsv.gz" \
+  "$tmp_dir/merged/component_effects.tsv.gz" \
+  "$tmp_dir/merged/window_qc.tsv"; do
+  test -s "$output"
+done
+
+Rscript - "$tmp_dir/window/window_qc.tsv" tests/fixtures/trans_window/expected_window_qc.tsv <<'RS'
+args <- commandArgs(trailingOnly = TRUE)
+actual <- data.table::fread(args[[1L]], check.names = FALSE)
+expected <- data.table::fread(args[[2L]], check.names = FALSE)
+columns <- names(expected)
+stopifnot(identical(actual[1L, ..columns], expected[1L, ..columns]))
+RS
+
+echo "Task 4 entrypoint tests passed"
