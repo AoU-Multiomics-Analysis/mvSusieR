@@ -40,6 +40,8 @@ The WDL input JSON supplies these fields:
 
 Covariate files are covariate-by-sample tables: the first column is the covariate ID and the remaining columns are sample IDs. `keep_samples` is optional and contains one sample ID per line.
 
+The R entrypoints use the `optparse` package and expose the same long-form flags shown in the WDL commands, including `--window-phenotypes`, `--max-iter`, and `--output-dir`.
+
 Run locally with:
 
 ```bash
