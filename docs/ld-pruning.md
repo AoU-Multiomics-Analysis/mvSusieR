@@ -27,8 +27,10 @@ successful push to `main`.
 | `maf` | No | `0.05` | Minimum minor-allele frequency. |
 | `geno` | No | `0.01` | Maximum variant missingness. |
 | `ld_window_kb` | No | `1000` | LD-pruning window size in kilobases. |
-| `ld_step_variants` | No | `50` | Number of variants advanced per pruning step. |
 | `ld_r2` | No | `0.1` | Pairwise LD threshold. |
+
+Because the window is expressed in kilobases, PLINK 2 requires the pruning
+step to be `1`; the workflow sets that value internally.
 
 ## Example input
 

@@ -11,7 +11,6 @@ workflow LDPruning {
     Float maf = 0.05
     Float geno = 0.01
     Int ld_window_kb = 1000
-    Int ld_step_variants = 50
     Float ld_r2 = 0.1
   }
 
@@ -26,7 +25,6 @@ workflow LDPruning {
       maf = maf,
       geno = geno,
       ld_window_kb = ld_window_kb,
-      ld_step_variants = ld_step_variants,
       ld_r2 = ld_r2
   }
 
@@ -51,7 +49,6 @@ task LDPruningTask {
     Float maf
     Float geno
     Int ld_window_kb
-    Int ld_step_variants
     Float ld_r2
   }
 
@@ -64,13 +61,12 @@ task LDPruningTask {
 
     plink2 \
       --pfile input \
-      --snps-only just-acgt \
       --max-alleles 2 \
       --maf ~{maf} \
       --geno ~{geno} \
       ~{if defined(keep_samples) then "--keep " + select_first([keep_samples]) else ""} \
       ~{if defined(exclude_variants) then "--exclude " + select_first([exclude_variants]) else ""} \
-      --indep-pairwise ~{ld_window_kb}kb ~{ld_step_variants} ~{ld_r2} \
+      --indep-pairwise ~{ld_window_kb}kb 1 ~{ld_r2} \
       --out ~{output_prefix}
 
     test -s ~{output_prefix}.prune.in
