@@ -1,0 +1,2 @@
+window_id	input_samples	shared_samples	input_variants	retained_variants	excluded_variants	input_phenotypes	retained_phenotypes	excluded_phenotypes	excluded_samples	covariate_rank
+w1	50	50	6	6	0	3	3	0	0	4
