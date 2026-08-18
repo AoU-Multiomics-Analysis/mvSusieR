@@ -1,4 +1,0 @@
-window_id	phenotype_id	modality	phenotype_file
-w1	ENSG000001.1	expression	expression.tsv
-w1	splice_1	splicing	splicing.tsv
-w1	tx_1	isoform_usage	isoform_usage.tsv

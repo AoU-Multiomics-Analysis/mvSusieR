@@ -1,2 +1,0 @@
-window_id	chrom	start	end	dosage_file
-w1	chr1	100	300	window_1_dosage.tsv
