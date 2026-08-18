@@ -99,14 +99,15 @@ extract_credible_sets <- function(fit, prepared, config) {
     members <- cs_obj$cs[[i]]
     component <- as.integer(sub("^L", "", names(cs_obj$cs)[[i]]))
     purity_row <- if (is.null(dim(purity))) purity else purity[i, ]
+    purity_values <- suppressWarnings(as.numeric(unlist(purity_row, use.names = FALSE)))
     data.table::data.table(
       component = component,
       variant_id = colnames(prepared$X)[members],
       alpha = as.numeric(fit$alpha[component, members]),
       pip = as.numeric(fit$pip[members]),
       coverage = config$coverage,
-      purity_min = if (length(purity_row)) min(purity_row, na.rm = TRUE) else NA_real_,
-      purity_mean = if (length(purity_row)) mean(purity_row, na.rm = TRUE) else NA_real_
+      purity_min = if (length(purity_values)) min(purity_values, na.rm = TRUE) else NA_real_,
+      purity_mean = if (length(purity_values)) mean(purity_values, na.rm = TRUE) else NA_real_
     )
   })
   data.table::rbindlist(rows, fill = TRUE)
