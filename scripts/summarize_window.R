@@ -3,10 +3,17 @@
 source("scripts/trans_window_model.R")
 source("scripts/trans_window_cli.R")
 
-args <- parse_cli_args()
+args <- parse_cli_args(
+  option_list = list(
+    optparse::make_option("--prepared", type = "character"),
+    optparse::make_option("--fit", type = "character"),
+    optparse::make_option("--output-dir", type = "character")
+  ),
+  description = "Write per-window mvSusie posterior summary tables."
+)
 prepared <- readRDS(require_cli_arg(args, "prepared"))
 bundle <- readRDS(require_cli_arg(args, "fit"))
-output_dir <- require_cli_arg(args, "output-dir")
+output_dir <- require_cli_arg(args, "output_dir")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 window_id <- as.character(prepared$qc$window_id)

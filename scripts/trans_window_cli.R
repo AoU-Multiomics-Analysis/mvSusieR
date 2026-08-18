@@ -1,28 +1,29 @@
-parse_cli_args <- function(args = commandArgs(trailingOnly = TRUE)) {
-  if (!length(args)) return(list())
-  out <- list()
-  i <- 1L
-  while (i <= length(args)) {
-    key <- args[[i]]
-    if (!startsWith(key, "--")) {
-      stop("Unexpected command-line token: ", key, call. = FALSE)
-    }
-    key <- sub("^--", "", key)
-    if (i == length(args) || startsWith(args[[i + 1L]], "--")) {
-      out[[key]] <- TRUE
-      i <- i + 1L
-    } else {
-      out[[key]] <- args[[i + 1L]]
-      i <- i + 2L
-    }
+parse_cli_args <- function(
+    option_list = list(),
+    args = commandArgs(trailingOnly = TRUE),
+    description = "") {
+  if (!requireNamespace("optparse", quietly = TRUE)) {
+    stop("The optparse package is required for the command-line interface.", call. = FALSE)
   }
-  out
+  parser <- optparse::OptionParser(
+    option_list = option_list,
+    description = description
+  )
+  parsed <- optparse::parse_args(
+    parser,
+    args = args,
+    positional_arguments = FALSE,
+    convert_hyphens_to_underscores = TRUE
+  )
+  parsed
 }
 
 require_cli_arg <- function(args, name) {
   value <- args[[name]]
-  if (is.null(value) || identical(value, TRUE) || !nzchar(value)) {
-    stop("Missing required command-line argument: --", name, call. = FALSE)
+  missing <- is.null(value) || !length(value) || identical(value, TRUE)
+  if (is.character(value)) missing <- missing || !nzchar(value[[1L]])
+  if (missing) {
+    stop("Missing required command-line option: --", gsub("_", "-", name), call. = FALSE)
   }
   value
 }
