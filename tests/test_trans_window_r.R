@@ -82,5 +82,33 @@ filtered <- prepare_window_data(
 stopifnot(filtered$qc$excluded_variants == 1L)
 stopifnot(ncol(filtered$X) == 2L)
 
+source("scripts/trans_window_model.R")
+
+set.seed(1001)
+config <- make_model_config()
+model_X <- matrix(rnorm(50L * 6L), nrow = 50L, ncol = 6L)
+model_Y <- matrix(rnorm(50L * 3L), nrow = 50L, ncol = 3L)
+colnames(model_X) <- paste0("variant_", seq_len(ncol(model_X)))
+colnames(model_Y) <- paste0("phenotype_", seq_len(ncol(model_Y)))
+model_prepared <- list(
+  X = model_X,
+  Y = scale(model_Y),
+  qc = list(window_id = "synthetic_model")
+)
+prior <- make_canonical_prior(ncol(model_prepared$Y))
+stopifnot(inherits(prior, "mash_prior"))
+
+result <- fit_window_mvsusie(model_prepared, config)
+stopifnot(isTRUE(result$fit$converged))
+stopifnot(identical(result$metadata$residual_variance_mode, "mvsusieR_default"))
+
+pip <- extract_variant_pips(result$fit, model_prepared)
+stopifnot(all(c("variant_id", "pip") %in% names(pip)))
+credible_sets <- extract_credible_sets(result$fit, model_prepared, config)
+stopifnot(all(c("component", "variant_id", "alpha", "pip") %in% names(credible_sets)))
+component_effects <- extract_component_effects(result$fit, model_prepared)
+stopifnot(all(c("component", "variant_id", "phenotype_id", "posterior_mean") %in% names(component_effects)))
+
 message("Task 1 reader tests passed")
 message("Task 2 preprocessing tests passed")
+message("Task 3 model tests passed")
