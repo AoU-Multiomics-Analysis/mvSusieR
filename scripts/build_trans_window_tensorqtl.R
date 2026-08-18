@@ -129,41 +129,6 @@ build_trans_window_tensorqtl_outputs <- function(
   )
 }
 
-parse_cli_args <- function(args = commandArgs(trailingOnly = TRUE)) {
-  if (length(args) %% 2L != 0L) {
-    stop("CLI arguments must be supplied as --option value pairs.", call. = FALSE)
-  }
-
-  keys <- args[seq(1L, length(args), by = 2L)]
-  values <- args[seq(2L, length(args), by = 2L)]
-
-  if (any(!str_detect(keys, "^--"))) {
-    stop("CLI options must begin with --.", call. = FALSE)
-  }
-
-  setNames(values, str_remove(keys, "^--"))
-}
-
-require_cli_arg <- function(args, name) {
-  value <- unname(args[name])
-
-  if (length(value) == 0L || is.na(value) || !nzchar(value)) {
-    stop("Missing required command-line argument: --", name, call. = FALSE)
-  }
-
-  value
-}
-
-optional_cli_arg <- function(args, name, default) {
-  value <- unname(args[name])
-
-  if (length(value) == 0L || is.na(value) || !nzchar(value)) {
-    return(default)
-  }
-
-  value
-}
-
 read_trans_input_files <- function(paths, labels) {
   paths <- as.character(paths)
   labels <- as.character(labels)
@@ -188,19 +153,20 @@ read_trans_input_files <- function(paths, labels) {
 }
 
 main <- function() {
-  args <- parse_cli_args()
-  trans_files <- str_split(
-    require_cli_arg(args, "trans-files"),
-    pattern = ",",
-    simplify = TRUE
-  ) %>%
-    str_trim()
-  trans_labels <- str_split(
-    require_cli_arg(args, "trans-labels"),
-    pattern = ",",
-    simplify = TRUE
-  ) %>%
-    str_trim()
+  source("scripts/trans_window_cli.R")
+  args <- parse_cli_args(
+    option_list = list(
+      optparse::make_option("--trans-files", type = "character"),
+      optparse::make_option("--trans-labels", type = "character"),
+      optparse::make_option("--output-dir", type = "character"),
+      optparse::make_option("--window-size-bp", type = "double", default = 2e6),
+      optparse::make_option("--trans-p-threshold", type = "double", default = 1e-8)
+    ),
+    description = "Build trans TensorQTL files by genomic window."
+  )
+
+  trans_files <- split_cli_paths(require_cli_arg(args, "trans_files"))
+  trans_labels <- split_cli_paths(require_cli_arg(args, "trans_labels"))
 
   trans_associations <- read_trans_input_files(
     paths = trans_files,
@@ -209,11 +175,9 @@ main <- function() {
 
   result <- build_trans_window_tensorqtl_outputs(
     trans_associations = trans_associations,
-    output_dir = require_cli_arg(args, "output-dir"),
-    window_size_bp = as.numeric(optional_cli_arg(args, "window-size-bp", 2e6)),
-    trans_p_threshold = as.numeric(
-      optional_cli_arg(args, "trans-p-threshold", 1e-8)
-    )
+    output_dir = require_cli_arg(args, "output_dir"),
+    window_size_bp = as.numeric(args$window_size_bp),
+    trans_p_threshold = as.numeric(args$trans_p_threshold)
   )
 
   message("Wrote ", nrow(result$windows), " trans windows.")
