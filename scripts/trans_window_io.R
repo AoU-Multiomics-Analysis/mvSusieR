@@ -160,7 +160,7 @@ resolve_file_reference <- function(reference, files) {
 }
 
 read_window_phenotypes <- function(window_id, phenotype_manifest, phenotype_files) {
-  rows <- phenotype_manifest[window_id == ..window_id]
+  rows <- phenotype_manifest[phenotype_manifest[["window_id"]] == window_id]
   if (!nrow(rows)) {
     stop("No phenotype rows found for window: ", window_id, call. = FALSE)
   }
