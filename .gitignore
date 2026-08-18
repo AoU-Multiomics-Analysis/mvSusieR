@@ -1,0 +1,2 @@
+# Trans-window test inputs are generated in temporary directories at test time.
+tests/fixtures/trans_window/*.tsv

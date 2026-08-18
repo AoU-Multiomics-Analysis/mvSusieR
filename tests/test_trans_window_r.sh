@@ -3,10 +3,13 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
-Rscript tests/test_trans_window_r.R
 
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/trans-window-r.XXXXXX")"
 trap 'rm -rf "$tmp_dir"' EXIT
+
+reader_dir="$tmp_dir/reader"
+Rscript tests/fixtures/trans_window/generate_reader_fixture.R "$reader_dir"
+Rscript tests/test_trans_window_r.R "$reader_dir"
 
 input_dir="$tmp_dir/input"
 Rscript tests/fixtures/trans_window/generate_model_fixture.R "$input_dir"
@@ -50,12 +53,16 @@ for output in \
   test -s "$output"
 done
 
-Rscript - "$tmp_dir/window/window_qc.tsv" tests/fixtures/trans_window/expected_window_qc.tsv <<'RS'
+Rscript - "$tmp_dir/window/window_qc.tsv" <<'RS'
 args <- commandArgs(trailingOnly = TRUE)
 actual <- data.table::fread(args[[1L]], check.names = FALSE)
-expected <- data.table::fread(args[[2L]], check.names = FALSE)
-columns <- names(expected)
-stopifnot(identical(actual[1L, ..columns], expected[1L, ..columns]))
+expected <- list(
+  window_id = "w1", input_samples = 50L, shared_samples = 50L,
+  input_variants = 6L, retained_variants = 6L, excluded_variants = 0L,
+  input_phenotypes = 3L, retained_phenotypes = 3L,
+  excluded_phenotypes = 0L, excluded_samples = 0L, covariate_rank = 4L
+)
+for (column in names(expected)) stopifnot(identical(actual[[column]][[1L]], expected[[column]]))
 RS
 
 echo "Task 4 entrypoint tests passed"
