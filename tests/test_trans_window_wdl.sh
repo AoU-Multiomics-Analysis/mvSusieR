@@ -6,6 +6,17 @@ cd "$repo_root"
 
 miniwdl check workflows/trans_window_mvsusie.wdl
 miniwdl check workflows/prepare_trans_window.wdl
+rg -q '^version 1[.]0$' workflows/trans_window_mvsusie.wdl
+rg -q 'covariate_modalities' workflows/trans_window_mvsusie.wdl
+rg -q 'sep="[,]" covariate_files' workflows/trans_window_mvsusie.wdl
+rg -q 'File phenotype_data' workflows/trans_window_mvsusie.wdl
+test "$(rg -c 'disks: "local-disk 500 SSD"' workflows/trans_window_mvsusie.wdl)" -eq 4
+test "$(rg -c 'memory: "16 GiB"' workflows/trans_window_mvsusie.wdl)" -eq 4
+
+if rg -q 'Array\[File\] phenotype_files' workflows/trans_window_mvsusie.wdl; then
+  echo "The mvSuSiE workflow should consume one combined phenotype file." >&2
+  exit 1
+fi
 
 for token in \
   PrepareWindowData \

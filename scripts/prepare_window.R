@@ -12,6 +12,7 @@ args <- parse_cli_args(
     optparse::make_option("--dosage", type = "character"),
     optparse::make_option("--phenotype-files", type = "character"),
     optparse::make_option("--covariate-files", type = "character"),
+    optparse::make_option("--covariate-modalities", type = "character", default = "shared"),
     optparse::make_option("--keep-samples", type = "character", default = NULL),
     optparse::make_option("--min-nonzero-fraction", type = "double", default = NULL),
     optparse::make_option("--min-genotype-variance", type = "double", default = 1e-8),
@@ -32,9 +33,15 @@ if (nrow(window) != 1L) {
 
 phenotype_files <- split_cli_paths(require_cli_arg(args, "phenotype_files"))
 covariate_files <- split_cli_paths(require_cli_arg(args, "covariate_files"))
+covariate_modalities <- split_cli_paths(
+  optional_cli_arg(args, "covariate_modalities", "shared")
+)
 dosage <- read_wide_dosage(require_cli_arg(args, "dosage"))
 phenotype_data <- read_window_phenotypes(window_id, phenotype_manifest, phenotype_files)
-covariates <- read_covariate_matrix(covariate_files)
+covariates_by_modality <- read_covariate_matrices(
+  paths = covariate_files,
+  modalities = covariate_modalities
+)
 
 min_nonzero_fraction <- optional_cli_arg(args, "min_nonzero_fraction")
 if (!is.null(min_nonzero_fraction)) min_nonzero_fraction <- as.numeric(min_nonzero_fraction)
@@ -42,7 +49,7 @@ prepared <- prepare_window_data(
   window = window,
   phenotype_data = phenotype_data,
   dosage = dosage,
-  covariates = covariates,
+  covariates_by_modality = covariates_by_modality,
   keep_samples = optional_cli_arg(args, "keep_samples"),
   min_genotype_variance = as_cli_numeric(args, "min_genotype_variance", 1e-8),
   min_phenotype_variance = as_cli_numeric(args, "min_phenotype_variance", 1e-8),

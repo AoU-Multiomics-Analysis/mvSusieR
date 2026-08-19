@@ -31,6 +31,19 @@ covariates <- read_covariate_matrix(
 stopifnot(identical(dim(covariates), c(6L, 2L)))
 stopifnot(identical(rownames(covariates), as.character(1:6)))
 
+covariates_by_modality <- read_covariate_matrices(
+  paths = c(
+    fixture("covariates.tsv"),
+    fixture("expression_covariates.tsv"),
+    fixture("splicing_covariates.tsv")
+  ),
+  modalities = c("shared", "expression", "splicing")
+)
+stopifnot(all(c("expression", "splicing", "isoform_usage") %in% names(covariates_by_modality)))
+stopifnot(all(c("COV1", "COV2", "EXPR_COV") %in% colnames(covariates_by_modality$expression)))
+stopifnot(all(c("COV1", "COV2", "SPLICE_COV") %in% colnames(covariates_by_modality$splicing)))
+stopifnot(identical(colnames(covariates_by_modality$isoform_usage), colnames(covariates)))
+
 source("scripts/trans_window_preprocess.R")
 
 phenotype_data <- read_window_phenotypes(
@@ -52,9 +65,30 @@ stopifnot(nrow(prepared$X) == length(prepared$samples))
 stopifnot(nrow(prepared$Y) == length(prepared$samples))
 stopifnot(all(is.finite(prepared$X)), all(is.finite(prepared$Y)))
 stopifnot(prepared$covariate_rank >= 1L)
-C_model <- cbind(covariates[prepared$samples, , drop = FALSE], intercept = 1)
-stopifnot(abs(max(abs(crossprod(C_model, prepared$X)))) < 1e-6)
-stopifnot(abs(max(abs(crossprod(C_model, prepared$Y)))) < 1e-6)
+stopifnot("modality" %in% names(phenotype_data$metadata))
+stopifnot("modality" %in% names(prepared$phenotype_metadata))
+
+prepared_modality <- prepare_window_data(
+  window = windows[1],
+  phenotype_data = phenotype_data,
+  dosage = dosage,
+  covariates_by_modality = covariates_by_modality
+)
+genotype_covariates <- unique_covariate_columns(
+  lapply(covariates_by_modality, function(matrix) matrix[prepared_modality$samples, , drop = FALSE])
+)
+genotype_model <- cbind(genotype_covariates, intercept = 1)
+stopifnot(abs(max(abs(crossprod(genotype_model, prepared_modality$X)))) < 1e-6)
+for (modality in unique(prepared_modality$phenotype_metadata$modality)) {
+  phenotype_indices <- which(prepared_modality$phenotype_metadata$modality == modality)
+  phenotype_model <- cbind(
+    covariates_by_modality[[modality]][prepared_modality$samples, , drop = FALSE],
+    intercept = 1
+  )
+  stopifnot(
+    abs(max(abs(crossprod(phenotype_model, prepared_modality$Y[, phenotype_indices, drop = FALSE])))) < 1e-6
+  )
+}
 
 bad_covariates <- covariates
 rownames(bad_covariates) <- paste0("missing_", seq_len(nrow(bad_covariates)))

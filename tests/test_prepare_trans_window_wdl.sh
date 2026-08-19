@@ -6,6 +6,13 @@ cd "$repo_root"
 
 miniwdl check workflows/prepare_trans_window.wdl
 rg -q '^version 1[.]0$' workflows/prepare_trans_window.wdl
+rg -q 'sep="[,]" phenotype_files' workflows/prepare_trans_window.wdl
+rg -q 'sep="[,]" phenotype_modalities' workflows/prepare_trans_window.wdl
+
+if rg -q '^[[:space:]]*String phenotype_(files|modalities)_csv[[:space:]]*=' workflows/prepare_trans_window.wdl; then
+  echo "The prepare workflow must not use sep() as a standalone WDL expression." >&2
+  exit 1
+fi
 
 for token in \
   PrepareTransWindow \
@@ -27,6 +34,8 @@ done
 rg -q 'call PrepareWindowGenotypes' workflows/prepare_trans_window.wdl
 rg -q 'call PrepareWindowPhenotypes' workflows/prepare_trans_window.wdl
 rg -q 'top_n_trans_phenotypes = 25' workflows/prepare_trans_window.wdl
+test "$(rg -c 'disks: "local-disk 500 SSD"' workflows/prepare_trans_window.wdl)" -eq 2
+test "$(rg -c 'memory: "16 GiB"' workflows/prepare_trans_window.wdl)" -eq 2
 
 if rg -q 'scatter[[:space:]]*\(' workflows/prepare_trans_window.wdl; then
   echo "The single-window preparation workflow must not scatter." >&2

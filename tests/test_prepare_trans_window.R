@@ -73,6 +73,7 @@ combined_reader <- read_window_phenotypes(
   phenotype_files = with_cis$phenotype_data
 )
 stopifnot(identical(combined_reader$phenotype_ids, manifest$phenotype_id))
+stopifnot(identical(as.character(combined_reader$metadata$modality), manifest$modality))
 
 combined_phenotypes <- read_tsv(with_cis$phenotype_data, show_col_types = FALSE)
 stopifnot(

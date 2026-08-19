@@ -134,9 +134,11 @@ read_phenotype_rows <- function(path, modality, phenotype_ids) {
   rownames(Y) <- sample_ids
   colnames(Y) <- phenotype_ids
   metadata_columns <- names(dt)[layout$metadata_columns]
+  metadata <- dt[row_index, ..metadata_columns]
+  metadata[, modality := modality]
   list(
     Y = Y,
-    metadata = dt[row_index, ..metadata_columns],
+    metadata = metadata,
     sample_ids = sample_ids,
     phenotype_ids = phenotype_ids,
     modality = modality,
@@ -167,14 +169,23 @@ read_window_phenotypes <- function(window_id, phenotype_manifest, phenotype_file
   grouped_rows <- split(seq_len(nrow(rows)), rows$phenotype_file)
   parts <- lapply(grouped_rows, function(indices) {
     source_file <- resolve_file_reference(rows$phenotype_file[[indices[[1L]]]], phenotype_files)
-    list(
-      indices = indices,
-      data = read_phenotype_rows(
-        source_file,
-        rows$modality[[indices[[1L]]]],
-        rows$phenotype_id[indices]
+    modalities <- as.character(rows$modality[indices])
+    if (
+      length(unique(modalities)) > 1L &&
+      any(!modalities %in% c("expression", "splicing"))
+    ) {
+      stop(
+        "A combined phenotype file may only mix expression and splicing layouts.",
+        call. = FALSE
       )
+    }
+    data <- read_phenotype_rows(
+      source_file,
+      modalities[[1L]],
+      rows$phenotype_id[indices]
     )
+    data$metadata[, modality := modalities]
+    list(indices = indices, data = data)
   })
   common_samples <- Reduce(intersect, lapply(parts, function(part) part$data$sample_ids))
   if (!length(common_samples)) {
@@ -197,36 +208,89 @@ read_window_phenotypes <- function(window_id, phenotype_manifest, phenotype_file
   )
 }
 
-read_covariate_matrix <- function(paths) {
+read_covariate_file <- function(path) {
+  dt <- fread(path, check.names = FALSE)
+  if (ncol(dt) < 2L) stop("Covariate file has no sample columns: ", path, call. = FALSE)
+  covariate_ids <- as.character(dt[[1L]])
+  if (anyDuplicated(covariate_ids)) {
+    stop("Covariate file contains duplicate covariate IDs: ", path, call. = FALSE)
+  }
+  sample_columns <- names(dt)[-1L]
+  sample_ids <- normalize_sample_ids(sample_columns)
+  if (anyDuplicated(sample_ids)) {
+    stop("Covariate file contains duplicate sample IDs: ", path, call. = FALSE)
+  }
+  values <- numeric_matrix(dt[, -1L, with = FALSE], "Covariate values")
+  values <- t(values)
+  rownames(values) <- sample_ids
+  colnames(values) <- covariate_ids
+  values
+}
+
+unique_covariate_columns <- function(matrices) {
+  if (!length(matrices)) stop("At least one covariate matrix is required.", call. = FALSE)
+  sample_ids <- rownames(matrices[[1L]])
+  if (is.null(sample_ids)) stop("Covariate matrices must have sample IDs.", call. = FALSE)
+  output <- matrix(numeric(), nrow = length(sample_ids), ncol = 0L)
+  rownames(output) <- sample_ids
+  seen <- character()
+  for (matrix in matrices) {
+    if (!identical(rownames(matrix), sample_ids)) {
+      stop("Covariate matrices do not contain the same sample IDs.", call. = FALSE)
+    }
+    duplicate_ids <- intersect(seen, colnames(matrix))
+    for (covariate_id in duplicate_ids) {
+      if (!isTRUE(all.equal(output[, covariate_id], matrix[, covariate_id]))) {
+        stop(
+          "Covariate ID has conflicting values across files: ",
+          covariate_id,
+          call. = FALSE
+        )
+      }
+    }
+    new_ids <- setdiff(colnames(matrix), seen)
+    if (length(new_ids)) {
+      output <- cbind(output, matrix[, new_ids, drop = FALSE])
+      seen <- c(seen, new_ids)
+    }
+  }
+  output
+}
+
+read_covariate_matrices <- function(paths, modalities = rep("shared", length(paths))) {
   paths <- as.character(paths)
   if (!length(paths)) stop("At least one covariate file is required.", call. = FALSE)
-  matrices <- lapply(paths, function(path) {
-    dt <- fread(path, check.names = FALSE)
-    if (ncol(dt) < 2L) stop("Covariate file has no sample columns: ", path, call. = FALSE)
-    covariate_ids <- as.character(dt[[1L]])
-    if (anyDuplicated(covariate_ids)) {
-      stop("Covariate file contains duplicate covariate IDs: ", path, call. = FALSE)
-    }
-    sample_columns <- names(dt)[-1L]
-    sample_ids <- normalize_sample_ids(sample_columns)
-    if (anyDuplicated(sample_ids)) {
-      stop("Covariate file contains duplicate sample IDs: ", path, call. = FALSE)
-    }
-    values <- numeric_matrix(dt[, -1L, with = FALSE], "Covariate values")
-    values <- t(values)
-    rownames(values) <- sample_ids
-    colnames(values) <- covariate_ids
-    values
-  })
-  sample_ids <- rownames(matrices[[1L]])
-  if (anyDuplicated(unlist(lapply(matrices, colnames)))) {
-    stop("Covariate files contain duplicate covariate IDs.", call. = FALSE)
+  modalities <- as.character(modalities)
+  if (length(modalities) != length(paths)) {
+    stop("The number of covariate modalities must match the number of files.", call. = FALSE)
   }
+  allowed <- c("shared", "expression", "splicing", "isoform_usage")
+  if (any(!modalities %in% allowed)) {
+    stop(
+      "Unsupported covariate modality. Expected one of: ",
+      paste(allowed, collapse = ", "),
+      call. = FALSE
+    )
+  }
+  matrices <- lapply(paths, read_covariate_file)
+  sample_ids <- rownames(matrices[[1L]])
   for (i in seq_along(matrices)[-1L]) {
     if (!all(sample_ids %in% rownames(matrices[[i]]))) {
       stop("Covariate files do not contain the same sample IDs.", call. = FALSE)
     }
     matrices[[i]] <- matrices[[i]][sample_ids, , drop = FALSE]
   }
-  do.call(cbind, matrices)
+  phenotype_modalities <- c("expression", "splicing", "isoform_usage")
+  setNames(lapply(phenotype_modalities, function(modality) {
+    selected <- matrices[modalities %in% c("shared", modality)]
+    if (!length(selected)) {
+      stop("No covariates supplied for modality: ", modality, call. = FALSE)
+    }
+    unique_covariate_columns(selected)
+  }), phenotype_modalities)
+}
+
+read_covariate_matrix <- function(paths) {
+  paths <- as.character(paths)
+  read_covariate_matrices(paths, rep("shared", length(paths)))$expression
 }

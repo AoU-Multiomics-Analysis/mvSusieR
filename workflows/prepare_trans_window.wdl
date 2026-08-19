@@ -13,9 +13,6 @@ workflow PrepareTransWindow {
     Int top_n_trans_phenotypes = 25
   }
 
-  String phenotype_files_csv = sep(",", phenotype_files)
-  String phenotype_modalities_csv = sep(",", phenotype_modalities)
-
   call PrepareWindowGenotypes {
     input:
       windows_tsv = windows_tsv,
@@ -30,8 +27,7 @@ workflow PrepareTransWindow {
       window_id = window_id,
       trans_window_associations = trans_window_associations,
       phenotype_files = phenotype_files,
-      phenotype_files_csv = phenotype_files_csv,
-      phenotype_modalities_csv = phenotype_modalities_csv,
+      phenotype_modalities = phenotype_modalities,
       extract_cis_window_phenotypes = extract_cis_window_phenotypes,
       top_n_trans_phenotypes = top_n_trans_phenotypes
   }
@@ -101,7 +97,8 @@ task PrepareWindowGenotypes {
   runtime {
     docker: "ghcr.io/aou-multiomics-analysis/mvsusier-prepare-window-genotypes:latest"
     cpu: 2
-    memory: "2 GiB"
+    memory: "16 GiB"
+    disks: "local-disk 500 SSD"
   }
 }
 
@@ -111,8 +108,7 @@ task PrepareWindowPhenotypes {
     String window_id
     File trans_window_associations
     Array[File] phenotype_files
-    String phenotype_files_csv
-    String phenotype_modalities_csv
+    Array[String] phenotype_modalities
     Boolean extract_cis_window_phenotypes
     Int top_n_trans_phenotypes
   }
@@ -125,8 +121,8 @@ task PrepareWindowPhenotypes {
       --windows ~{windows_tsv} \
       --window-id ~{window_id} \
       --trans-associations ~{trans_window_associations} \
-      --phenotype-files "~{phenotype_files_csv}" \
-      --phenotype-modalities "~{phenotype_modalities_csv}" \
+      --phenotype-files "~{sep="," phenotype_files}" \
+      --phenotype-modalities "~{sep="," phenotype_modalities}" \
       --extract-cis-window-phenotypes ~{extract_cis_window_phenotypes} \
       --top-n-trans-phenotypes ~{top_n_trans_phenotypes} \
       --output-dir output
@@ -142,5 +138,6 @@ task PrepareWindowPhenotypes {
     docker: "ghcr.io/aou-multiomics-analysis/mvsusier-prepare-window-phenotypes:latest"
     cpu: 2
     memory: "16 GiB"
+    disks: "local-disk 500 SSD"
   }
 }

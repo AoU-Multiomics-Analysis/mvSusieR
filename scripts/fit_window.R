@@ -34,6 +34,7 @@ bundle <- list(
   phenotype_metadata = prepared$phenotype_metadata,
   samples = prepared$samples,
   covariate_rank = prepared$covariate_rank,
+  phenotype_covariate_rank = prepared$phenotype_covariate_rank,
   qc = prepared$qc
 )
 save_rds_checked(bundle, require_cli_arg(args, "output"))

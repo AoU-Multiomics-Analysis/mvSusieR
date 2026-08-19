@@ -1,11 +1,12 @@
-version 1.1
+version 1.0
 
 workflow TransWindowMvSusie {
   input {
     File windows_tsv
     File window_phenotypes_tsv
-    Array[File] phenotype_files
+    File phenotype_data
     Array[File] covariate_files
+    Array[String] covariate_modalities = ["shared"]
     File? keep_samples
     Int L = 10
     Int max_iter = 100
@@ -29,8 +30,9 @@ workflow TransWindowMvSusie {
         window_phenotypes_tsv = window_phenotypes_tsv,
         window_id = window[0],
         dosage = dosage,
-        phenotype_files = phenotype_files,
+        phenotype_data = phenotype_data,
         covariate_files = covariate_files,
+        covariate_modalities = covariate_modalities,
         keep_samples = keep_samples,
         min_genotype_variance = min_genotype_variance,
         min_phenotype_variance = min_phenotype_variance
@@ -82,8 +84,9 @@ task PrepareWindowData {
     File window_phenotypes_tsv
     String window_id
     File dosage
-    Array[File] phenotype_files
+    File phenotype_data
     Array[File] covariate_files
+    Array[String] covariate_modalities
     File? keep_samples
     Float min_genotype_variance
     Float min_phenotype_variance
@@ -97,8 +100,9 @@ task PrepareWindowData {
       --window-phenotypes ~{window_phenotypes_tsv} \
       --window-id ~{window_id} \
       --dosage ~{dosage} \
-      --phenotype-files "~{sep(",", phenotype_files)}" \
-      --covariate-files "~{sep(",", covariate_files)}" \
+      --phenotype-files ~{phenotype_data} \
+      --covariate-files "~{sep="," covariate_files}" \
+      --covariate-modalities "~{sep="," covariate_modalities}" \
       ~{if defined(keep_samples) then "--keep-samples " + select_first([keep_samples]) else ""} \
       --min-genotype-variance ~{min_genotype_variance} \
       --min-phenotype-variance ~{min_phenotype_variance} \
@@ -112,7 +116,8 @@ task PrepareWindowData {
   runtime {
     docker: "ghcr.io/evin-padhi/mvsusier-trans-window-mvsusie:latest"
     cpu: 2
-    memory: "8 GiB"
+    memory: "16 GiB"
+    disks: "local-disk 500 SSD"
   }
 }
 
@@ -148,7 +153,8 @@ task RunMvSusie {
   runtime {
     docker: "ghcr.io/evin-padhi/mvsusier-trans-window-mvsusie:latest"
     cpu: 2
-    memory: "8 GiB"
+    memory: "16 GiB"
+    disks: "local-disk 500 SSD"
   }
 }
 
@@ -178,7 +184,8 @@ task SummarizeMvSusie {
   runtime {
     docker: "ghcr.io/evin-padhi/mvsusier-trans-window-mvsusie:latest"
     cpu: 2
-    memory: "8 GiB"
+    memory: "16 GiB"
+    disks: "local-disk 500 SSD"
   }
 }
 
@@ -195,10 +202,10 @@ task MergeWindowOutputs {
     mkdir -p merged
 
     Rscript /opt/mvsusie/scripts/merge_window_outputs.R \
-      --variant-pips "~{sep(",", variant_pips)}" \
-      --credible-sets "~{sep(",", credible_sets)}" \
-      --component-effects "~{sep(",", component_effects)}" \
-      --window-qc "~{sep(",", window_qc)}" \
+      --variant-pips "~{sep="," variant_pips}" \
+      --credible-sets "~{sep="," credible_sets}" \
+      --component-effects "~{sep="," component_effects}" \
+      --window-qc "~{sep="," window_qc}" \
       --output-dir merged
   >>>
 
@@ -212,6 +219,7 @@ task MergeWindowOutputs {
   runtime {
     docker: "ghcr.io/evin-padhi/mvsusier-trans-window-mvsusie:latest"
     cpu: 1
-    memory: "2 GiB"
+    memory: "16 GiB"
+    disks: "local-disk 500 SSD"
   }
 }

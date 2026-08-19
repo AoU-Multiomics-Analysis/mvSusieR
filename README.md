@@ -22,8 +22,9 @@ The WDL input JSON supplies these fields:
 {
   "TransWindowMvSusie.windows_tsv": "windows.tsv",
   "TransWindowMvSusie.window_phenotypes_tsv": "window_phenotypes.tsv",
-  "TransWindowMvSusie.phenotype_files": ["expression.tsv", "splicing.tsv", "isoform_usage.tsv"],
+  "TransWindowMvSusie.phenotype_data": "window_phenotypes.bed.gz",
   "TransWindowMvSusie.covariate_files": ["covariates.tsv"],
+  "TransWindowMvSusie.covariate_modalities": ["shared"],
   "TransWindowMvSusie.keep_samples": null,
   "TransWindowMvSusie.L": 10,
   "TransWindowMvSusie.max_iter": 100,
@@ -38,9 +39,9 @@ The WDL input JSON supplies these fields:
 
 `windows.tsv` is tab-delimited with one header row and columns `window_id`, `chrom`, `start`, `end`, and `dosage_file`. Coordinates are 0-based, half-open. Each dosage file is window-specific and wide: `CHROM`, `POS`, `REF`, `ALT`, followed by one column per sample.
 
-`window_phenotypes.tsv` has columns `window_id`, `phenotype_id`, `modality`, and `phenotype_file`. Supported modalities are `expression`, `splicing`, and `isoform_usage`. Expression and splicing files use the established feature-by-sample layout with the phenotype ID in column 4; isoform-usage files use the phenotype ID in column 1. `phenotype_files` must contain every file referenced by the manifest.
+`window_phenotypes.tsv` has columns `window_id`, `phenotype_id`, `modality`, and `phenotype_file`. The `phenotype_data` input should normally be the single combined `window_phenotypes.bed.gz` produced by `PrepareWindowPhenotypes`. Supported modalities are `expression`, `splicing`, and `isoform_usage`. Expression and splicing use the established feature-by-sample layout with the phenotype ID in column 4; isoform-usage files use the phenotype ID in column 1.
 
-Covariate files are covariate-by-sample tables: the first column is the covariate ID and the remaining columns are sample IDs. `keep_samples` is optional and contains one sample ID per line.
+Covariate files are covariate-by-sample tables: the first column is the covariate ID and the remaining columns are sample IDs. `covariate_modalities` labels each covariate file as `shared`, `expression`, `splicing`, or `isoform_usage`; the arrays must have matching lengths. Shared covariates are applied to every modality, while modality-specific files are applied only to that modality. `keep_samples` is optional and contains one sample ID per line.
 
 The R entrypoints use the `optparse` package and expose the same long-form flags shown in the WDL commands, including `--window-phenotypes`, `--max-iter`, and `--output-dir`.
 
@@ -54,7 +55,7 @@ The model WDL still declares a future runtime image. The two preparation images 
 
 ### Model defaults and behavior
 
-The canonical mixture prior is fixed in v1. Residual covariance uses the `mvsusieR` default behavior (`residual_variance = NULL`); the fit estimates residual variance and does not estimate prior variance. Other defaults are `L = 10`, `max_iter = 100`, `tol = 1e-4`, `coverage = 0.95`, `min_abs_corr = 0.5`, genotype and phenotype variance thresholds of `1e-8`, and one thread. Samples are intersected across inputs, phenotypes are rank-inverse-normal transformed, and covariates are residualized before fitting. A failed or non-converged window fails the overall workflow.
+The canonical mixture prior is fixed in v1. Residual covariance uses the `mvsusieR` default behavior (`residual_variance = NULL`); the fit estimates residual variance and does not estimate prior variance. Other defaults are `L = 10`, `max_iter = 100`, `tol = 1e-4`, `coverage = 0.95`, `min_abs_corr = 0.5`, genotype and phenotype variance thresholds of `1e-8`, one thread, `16 GiB` memory, and a `500 GB` local disk. Samples are intersected across inputs, phenotypes are rank-inverse-normal transformed, and covariates are residualized before fitting. The genotype matrix is residualized against the union of all nuisance covariates, while each phenotype is residualized only against the covariates assigned to its modality; expression is not regressed out of splicing. A failed or non-converged window fails the overall workflow.
 
 ### Outputs
 

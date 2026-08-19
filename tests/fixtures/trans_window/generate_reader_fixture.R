@@ -61,3 +61,22 @@ covariates <- data.table(
   X4 = c(0.4, -0.1), X5 = c(-0.1, 0.3), X6 = c(0.3, -0.2)
 )
 fwrite(covariates, file.path(output_dir, "covariates.tsv"), sep = "\t")
+
+fwrite(
+  data.table(
+    covariate = "EXPR_COV",
+    X1 = 0.7, X2 = -0.2, X3 = 0.4,
+    X4 = -0.5, X5 = 0.1, X6 = 0.3
+  ),
+  file.path(output_dir, "expression_covariates.tsv"),
+  sep = "\t"
+)
+fwrite(
+  data.table(
+    covariate = "SPLICE_COV",
+    X1 = -0.1, X2 = 0.6, X3 = -0.3,
+    X4 = 0.2, X5 = 0.5, X6 = -0.4
+  ),
+  file.path(output_dir, "splicing_covariates.tsv"),
+  sep = "\t"
+)
