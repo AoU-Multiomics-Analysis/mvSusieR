@@ -19,18 +19,15 @@ Rscript tests/test_trans_window_r.R "$reader_dir"
 input_dir="$tmp_dir/input"
 Rscript tests/fixtures/trans_window/generate_model_fixture.R "$input_dir"
 
-Rscript scripts/prepare_window.R \
+Rscript scripts/run_window_mvsusie.R \
   --windows "$input_dir/windows.tsv" \
   --window-phenotypes "$input_dir/window_phenotypes.tsv" \
   --window-id w1 \
   --dosage "$input_dir/model_dosage.tsv" \
   --phenotype-files "$input_dir/model_expression.tsv,$input_dir/model_splicing.tsv,$input_dir/model_isoform.tsv" \
   --covariate-files "$input_dir/model_covariates.tsv" \
-  --output "$tmp_dir/prepared_window.rds"
-
-Rscript scripts/fit_window.R \
-  --prepared "$tmp_dir/prepared_window.rds" \
-  --output "$tmp_dir/mvsusie_fit.rds"
+  --prepared-output "$tmp_dir/prepared_window.rds" \
+  --fit-output "$tmp_dir/mvsusie_fit.rds"
 
 Rscript scripts/summarize_window.R \
   --prepared "$tmp_dir/prepared_window.rds" \

@@ -1,0 +1,99 @@
+name: Trans-window mvSuSiE container
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "envs/trans-window-mvsusie.Dockerfile"
+      - "scripts/trans_window_io.R"
+      - "scripts/trans_window_preprocess.R"
+      - "scripts/trans_window_model.R"
+      - "scripts/trans_window_cli.R"
+      - "scripts/run_window_mvsusie.R"
+      - "scripts/summarize_window.R"
+      - "scripts/merge_window_outputs.R"
+  pull_request:
+    branches: [main]
+    paths:
+      - "envs/trans-window-mvsusie.Dockerfile"
+      - "scripts/trans_window_io.R"
+      - "scripts/trans_window_preprocess.R"
+      - "scripts/trans_window_model.R"
+      - "scripts/trans_window_cli.R"
+      - "scripts/run_window_mvsusie.R"
+      - "scripts/summarize_window.R"
+      - "scripts/merge_window_outputs.R"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/mvsusier-trans-window-mvsusie
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image for smoke test
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./envs/trans-window-mvsusie.Dockerfile
+          load: true
+          push: false
+          tags: trans-window-mvsusie-ci:latest
+
+      - name: Verify R dependencies and scripts
+        run: |
+          docker run --rm trans-window-mvsusie-ci:latest Rscript -e '
+            stopifnot(packageVersion("mvsusieR") >= "0.3.0")
+            stopifnot(packageVersion("susieR") >= "0.15.54")
+            scripts <- c(
+              "trans_window_io.R",
+              "trans_window_preprocess.R",
+              "trans_window_model.R",
+              "trans_window_cli.R",
+              "run_window_mvsusie.R",
+              "summarize_window.R",
+              "merge_window_outputs.R"
+            )
+            stopifnot(all(file.exists(file.path("/opt/mvsusie/scripts", scripts))))
+          '
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        if: github.event_name != 'pull_request'
+        id: metadata
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Publish image
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./envs/trans-window-mvsusie.Dockerfile
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}

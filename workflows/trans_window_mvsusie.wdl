@@ -24,7 +24,7 @@ workflow TransWindowMvSusie {
     Array[String] window = window_rows[window_index + 1]
     File dosage = window[4]
 
-    call PrepareWindowData {
+    call RunMvSusie {
       input:
         windows_tsv = windows_tsv,
         window_phenotypes_tsv = window_phenotypes_tsv,
@@ -35,12 +35,7 @@ workflow TransWindowMvSusie {
         covariate_modalities = covariate_modalities,
         keep_samples = keep_samples,
         min_genotype_variance = min_genotype_variance,
-        min_phenotype_variance = min_phenotype_variance
-    }
-
-    call RunMvSusie {
-      input:
-        prepared_window = PrepareWindowData.prepared_window,
+        min_phenotype_variance = min_phenotype_variance,
         L = L,
         max_iter = max_iter,
         tol = tol,
@@ -51,7 +46,7 @@ workflow TransWindowMvSusie {
 
     call SummarizeMvSusie {
       input:
-        prepared_window = PrepareWindowData.prepared_window,
+        prepared_window = RunMvSusie.prepared_window,
         mvsusie_fit = RunMvSusie.mvsusie_fit
     }
   }
@@ -65,7 +60,7 @@ workflow TransWindowMvSusie {
   }
 
   output {
-    Array[File] prepared_windows = PrepareWindowData.prepared_window
+    Array[File] prepared_windows = RunMvSusie.prepared_window
     Array[File] mvsusie_fits = RunMvSusie.mvsusie_fit
     Array[File] variant_pip = SummarizeMvSusie.variant_pip
     Array[File] credible_sets = SummarizeMvSusie.credible_sets
@@ -78,7 +73,7 @@ workflow TransWindowMvSusie {
   }
 }
 
-task PrepareWindowData {
+task RunMvSusie {
   input {
     File windows_tsv
     File window_phenotypes_tsv
@@ -90,40 +85,6 @@ task PrepareWindowData {
     File? keep_samples
     Float min_genotype_variance
     Float min_phenotype_variance
-  }
-
-  command <<<
-    set -euo pipefail
-
-    Rscript /opt/mvsusie/scripts/prepare_window.R \
-      --windows ~{windows_tsv} \
-      --window-phenotypes ~{window_phenotypes_tsv} \
-      --window-id ~{window_id} \
-      --dosage ~{dosage} \
-      --phenotype-files ~{phenotype_data} \
-      --covariate-files "~{sep="," covariate_files}" \
-      --covariate-modalities "~{sep="," covariate_modalities}" \
-      ~{if defined(keep_samples) then "--keep-samples " + select_first([keep_samples]) else ""} \
-      --min-genotype-variance ~{min_genotype_variance} \
-      --min-phenotype-variance ~{min_phenotype_variance} \
-      --output prepared_window.rds
-  >>>
-
-  output {
-    File prepared_window = "prepared_window.rds"
-  }
-
-  runtime {
-    docker: "ghcr.io/evin-padhi/mvsusier-trans-window-mvsusie:latest"
-    cpu: 2
-    memory: "16 GiB"
-    disks: "local-disk 500 SSD"
-  }
-}
-
-task RunMvSusie {
-  input {
-    File prepared_window
     Int L
     Int max_iter
     Float tol
@@ -135,23 +96,34 @@ task RunMvSusie {
   command <<<
     set -euo pipefail
 
-    Rscript /opt/mvsusie/scripts/fit_window.R \
-      --prepared ~{prepared_window} \
+    Rscript /opt/mvsusie/scripts/run_window_mvsusie.R \
+      --windows ~{windows_tsv} \
+      --window-phenotypes ~{window_phenotypes_tsv} \
+      --window-id ~{window_id} \
+      --dosage ~{dosage} \
+      --phenotype-files ~{phenotype_data} \
+      --covariate-files "~{sep="," covariate_files}" \
+      --covariate-modalities "~{sep="," covariate_modalities}" \
+      ~{if defined(keep_samples) then "--keep-samples " + select_first([keep_samples]) else ""} \
+      --min-genotype-variance ~{min_genotype_variance} \
+      --min-phenotype-variance ~{min_phenotype_variance} \
       --L ~{L} \
       --max-iter ~{max_iter} \
       --tol ~{tol} \
       --coverage ~{coverage} \
       --min-abs-corr ~{min_abs_corr} \
       --n-thread ~{n_thread} \
-      --output mvsusie_fit.rds
+      --prepared-output prepared_window.rds \
+      --fit-output mvsusie_fit.rds
   >>>
 
   output {
+    File prepared_window = "prepared_window.rds"
     File mvsusie_fit = "mvsusie_fit.rds"
   }
 
   runtime {
-    docker: "ghcr.io/evin-padhi/mvsusier-trans-window-mvsusie:latest"
+    docker: "ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest"
     cpu: 2
     memory: "16 GiB"
     disks: "local-disk 500 SSD"
@@ -182,7 +154,7 @@ task SummarizeMvSusie {
   }
 
   runtime {
-    docker: "ghcr.io/evin-padhi/mvsusier-trans-window-mvsusie:latest"
+    docker: "ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest"
     cpu: 2
     memory: "16 GiB"
     disks: "local-disk 500 SSD"
@@ -217,7 +189,7 @@ task MergeWindowOutputs {
   }
 
   runtime {
-    docker: "ghcr.io/evin-padhi/mvsusier-trans-window-mvsusie:latest"
+    docker: "ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest"
     cpu: 1
     memory: "16 GiB"
     disks: "local-disk 500 SSD"

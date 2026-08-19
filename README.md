@@ -51,7 +51,7 @@ Run locally with:
 miniwdl run workflows/trans_window_mvsusie.wdl -i trans_window.inputs.json
 ```
 
-The model WDL still declares a future runtime image. The two preparation images are built and published to GHCR by the `prepare-window-genotypes-image` and `prepare-window-phenotypes-image` GitHub Actions workflows.
+The model image is built and published to GHCR by the `trans-window-mvsusie-image` GitHub Actions workflow. Each scattered `RunMvSusie` task uses `scripts/run_window_mvsusie.R` to prepare one window and fit mvSuSiE in the same job, writing both the prepared-window RDS and the fit RDS. The summary and merge tasks consume those outputs downstream.
 
 ### Model defaults and behavior
 
@@ -67,7 +67,7 @@ The workflow emits per-window prepared data, fit RDS files, variant PIP tables, 
 
 `PrepareWindowGenotypes` extracts the requested dosage interval with `tabix` and writes the one-row dosage manifest. `PrepareWindowPhenotypes` runs `scripts/prepare_trans_window.R`; for now, each gzipped phenotype BED is read fully into R and filtered in memory. Expression and splicing files use the first three columns for chromosome/start/end and column 4 for the phenotype ID. The default `top_n_trans_phenotypes` is 25 per modality: trans phenotypes are ranked within each modality by their minimum TensorQTL p-value across variants, and the top N from each modality are retained. All cis phenotypes overlapping the selected window are retained independently; set `extract_cis_window_phenotypes` to `false` for trans-only preparation.
 
-The outputs are `window_dosage.tsv`, a one-row `window_manifest.tsv` compatible with the existing dosage-manifest reader, one combined `window_phenotypes.bed.gz` file, `window_phenotypes.tsv` as the phenotype/modality key for the existing `prepare_window.R` interface, and `window_qc.tsv`. The combined phenotype file is intentionally not tabix-indexed in this first implementation; indexing or a one-time in-memory/columnar cache can be added later if full-file scans become the bottleneck.
+The outputs are `window_dosage.tsv`, a one-row `window_manifest.tsv` compatible with the dosage-manifest reader, one combined `window_phenotypes.bed.gz` file, `window_phenotypes.tsv` as the phenotype/modality key consumed by `run_window_mvsusie.R`, and `window_qc.tsv`. The combined phenotype file is intentionally not tabix-indexed in this first implementation; indexing or a one-time in-memory/columnar cache can be added later if full-file scans become the bottleneck.
 
 ## LD-pruning workflow
 
