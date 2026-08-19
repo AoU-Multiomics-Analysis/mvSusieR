@@ -52,7 +52,7 @@ Run locally with:
 miniwdl run workflows/trans_window_mvsusie.wdl -i trans_window.inputs.json
 ```
 
-The model image is built and published to GHCR by the `trans-window-mvsusie-image` GitHub Actions workflow. Each scattered `RunMvSusie` task uses `scripts/run_window_mvsusie.R` to prepare one window and fit mvSuSiE in the same job, writing both the prepared-window RDS and the fit RDS. The summary and merge tasks consume those outputs downstream.
+The model image is built and published to GHCR by the `trans-window-mvsusie-image` GitHub Actions workflow. It installs `mvsusieR >= 0.3.0` and `susieR >= 0.15.54`. Each scattered `RunMvSusie` task uses `scripts/run_window_mvsusie.R` to prepare one window and fit mvSuSiE in the same job, writing both the prepared-window RDS and the fit RDS. The summary and merge tasks consume those outputs downstream.
 
 ### Model defaults and behavior
 
@@ -65,6 +65,21 @@ The workflow emits per-window prepared data, fit RDS files, variant PIP tables, 
 ### Per-window input preparation
 
 `workflows/prepare_trans_window.wdl` prepares one window per workflow invocation using two independent tasks. The caller supplies one `window_id`, the global `trans_window_associations.tsv.gz` mapping, a tabix-indexed genome-wide dosage file plus its `.tbi` index, and matching arrays of phenotype files and modality labels. The workflow does not scatter; launch one invocation per window from the outer scheduler. `PrepareWindowGenotypes` and `PrepareWindowPhenotypes` both filter the shared association mapping, so they can still be scheduled independently when desired.
+
+For example, a preparation invocation has inputs of the following form:
+
+```json
+{
+  "PrepareTransWindow.window_id": "chr1_0_2000000",
+  "PrepareTransWindow.trans_window_associations": "trans_window_associations.tsv.gz",
+  "PrepareTransWindow.genome_dosage": "genome_dosage.tsv.gz",
+  "PrepareTransWindow.genome_dosage_tbi": "genome_dosage.tsv.gz.tbi",
+  "PrepareTransWindow.phenotype_files": ["expression.bed.gz", "splicing.bed.gz"],
+  "PrepareTransWindow.phenotype_modalities": ["expression", "splicing"],
+  "PrepareTransWindow.extract_cis_window_phenotypes": true,
+  "PrepareTransWindow.top_n_trans_phenotypes": 25
+}
+```
 
 `build_trans_window_tensorqtl.R` creates `trans_window_associations.tsv.gz` in long form with columns `window_id`, `chrom`, `start`, `end`, `modality`, `molecular_trait_id`, and `p_value`. There is one row per window/modality/molecular-trait connection; `p_value` is the minimum TensorQTL p-value across variants in that window. Only associations passing the configured genome-wide threshold are included. `PrepareWindowGenotypes` extracts the requested interval with `tabix` using the distinct coordinates for that `window_id` and writes the one-row dosage manifest. `PrepareWindowPhenotypes` runs `scripts/prepare_trans_window.R`; for now, each gzipped phenotype BED is read fully into R and filtered in memory. Expression and splicing files use the first three columns for chromosome/start/end and column 4 for the phenotype ID. The default `top_n_trans_phenotypes` is 25 per modality: trans phenotypes are ranked within the selected window by `p_value`, and the top N from each modality are retained. All cis phenotypes overlapping the selected window are retained independently; set `extract_cis_window_phenotypes` to `false` for trans-only preparation.
 

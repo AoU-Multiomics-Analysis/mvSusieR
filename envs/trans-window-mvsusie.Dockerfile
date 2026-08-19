@@ -8,12 +8,15 @@ LABEL org.opencontainers.image.title="mvSuSiE trans-window fine-mapping" \
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
         ca-certificates \
+        build-essential \
+        gfortran \
         libcurl4-openssl-dev \
         libfontconfig1-dev \
         libfreetype6-dev \
         libfribidi-dev \
         git \
         libglpk-dev \
+        libgsl-dev \
         libharfbuzz-dev \
         libjpeg-dev \
         libpng-dev \
@@ -27,10 +30,11 @@ RUN install2.r --error --skipinstalled --ncpus -1 \
     optparse \
     remotes
 
-# mvsusieR 0.3.0 requires susieR >= 0.15.54. The current susieR development
-# branch is installed first because the CRAN release is older than that floor.
-RUN Rscript -e 'remotes::install_github("stephenslab/susieR@master", dependencies = TRUE, upgrade = "never")' \
-    && Rscript -e 'remotes::install_github("stephenslab/mvsusieR@master", dependencies = TRUE, upgrade = "never")' \
+# mvsusieR 0.3.0 requires susieR >= 0.15.54. Install the current master
+# tarballs directly and request only runtime dependencies; installing Suggests
+# would add unnecessary documentation and test-toolchain dependencies.
+RUN Rscript -e 'remotes::install_url("https://github.com/stephenslab/susieR/archive/refs/heads/master.tar.gz", dependencies = c("Depends", "Imports", "LinkingTo"), upgrade = "never")' \
+    && Rscript -e 'remotes::install_url("https://github.com/stephenslab/mvsusieR/archive/refs/heads/master.tar.gz", dependencies = c("Depends", "Imports", "LinkingTo"), upgrade = "never")' \
     && Rscript -e 'stopifnot(utils::packageVersion("mvsusieR") >= "0.3.0", utils::packageVersion("susieR") >= "0.15.54")'
 
 COPY scripts/trans_window_io.R \

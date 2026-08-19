@@ -55,6 +55,8 @@ jobs:
       - name: Verify R dependencies and scripts
         run: |
           docker run --rm trans-window-mvsusie-ci:latest Rscript -e '
+            stopifnot(requireNamespace("mvsusieR", quietly = TRUE))
+            stopifnot(requireNamespace("susieR", quietly = TRUE))
             stopifnot(packageVersion("mvsusieR") >= "0.3.0")
             stopifnot(packageVersion("susieR") >= "0.15.54")
             scripts <- c(
