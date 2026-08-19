@@ -8,15 +8,16 @@ trans <- tibble::tibble(
   variant_id = c(
     "chr1:100_A_G",
     "chr1:200_A_G",
+    "chr1:300_A_G",
     "chr1:2500000_A_G",
     "chr1:3000000_A_G"
   ),
-  phenotype_id = c("trans_1", "trans_2", "trans_3", "not_significant"),
-  modality = c("expression", "expression", "splicing", "splicing"),
-  pval = c(1e-10, 2e-10, 3e-10, 1e-4),
-  b = c(0.1, 0.2, 0.3, 0.4),
-  b_se = rep(0.01, 4L),
-  af = rep(0.25, 4L)
+  phenotype_id = c("trans_1", "trans_2", "trans_1", "trans_3", "not_significant"),
+  modality = c("expression", "expression", "expression", "splicing", "splicing"),
+  pval = c(1e-10, 2e-10, 1e-12, 3e-10, 1e-4),
+  b = c(0.1, 0.2, 0.15, 0.3, 0.4),
+  b_se = rep(0.01, 5L),
+  af = rep(0.25, 5L)
 )
 
 input_dir <- tempfile("tensorqtl_inputs_")
@@ -44,31 +45,44 @@ result <- build_trans_window_tensorqtl_outputs(
   trans_p_threshold = 1e-8
 )
 
-stopifnot(nrow(result$windows) == 2L)
-stopifnot(all(file.exists(result$windows$association_file)))
-stopifnot(file.exists(result$windows_path))
-
-expected_columns <- c(
-  "variant_id", "phenotype_id", "pval", "b", "b_se", "af",
-  "modality", "__index_level_0__"
-)
-
-window_files <- result$windows$association_file
-window_tables <- purrr::map(window_files, ~ readr::read_tsv(
-  .x,
+stopifnot(file.exists(result$associations_path))
+stopifnot(basename(result$associations_path) == "trans_window_associations.tsv.gz")
+associations <- readr::read_tsv(
+  result$associations_path,
   show_col_types = FALSE
-))
-
-stopifnot(all(purrr::map_lgl(window_tables, ~ identical(names(.x), expected_columns))))
-stopifnot(all(!purrr::map_lgl(window_tables, ~ "not_significant" %in% .x$phenotype_id)))
-stopifnot(sum(purrr::map_int(window_tables, nrow)) == 3L)
-stopifnot(all(purrr::map_lgl(
-  window_tables,
-  ~ identical(as.integer(.x$`__index_level_0__`), seq_len(nrow(.x)) - 1L)
+)
+expected_columns <- c(
+  "window_id", "chrom", "start", "end", "modality",
+  "molecular_trait_id", "p_value"
+)
+stopifnot(identical(names(associations), expected_columns))
+stopifnot(nrow(associations) == 3L)
+stopifnot(!"not_significant" %in% associations$molecular_trait_id)
+stopifnot(nrow(dplyr::distinct(associations, window_id, modality, molecular_trait_id)) == 3L)
+stopifnot(all(associations$p_value < 1e-8))
+stopifnot(identical(sort(unique(associations$window_id)), c("chr1_0_2000000", "chr1_2000000_4000000")))
+stopifnot(associations$p_value[associations$molecular_trait_id == "trans_1"] == 1e-12)
+stopifnot(isTRUE(all.equal(
+  as.data.frame(result$associations),
+  as.data.frame(associations),
+  check.attributes = FALSE
 )))
 
-stopifnot(result$windows$n_assoc %>% sum() == 3L)
-stopifnot(result$windows$n_variants %>% sum() == 3L)
-stopifnot(result$windows$n_phenotypes %>% sum() == 3L)
+boundary <- tibble::tibble(
+  variant_id = "chr1:2000000_A_G",
+  phenotype_id = "boundary_trait",
+  modality = "expression",
+  pval = 1e-10,
+  b = 0.1,
+  b_se = 0.01,
+  af = 0.25
+)
+boundary_result <- build_trans_window_tensorqtl_outputs(
+  trans_associations = boundary,
+  output_dir = tempfile("tensorqtl_boundary_"),
+  window_size_bp = 2e6,
+  trans_p_threshold = 1e-8
+)
+stopifnot(boundary_result$associations$window_id == "chr1_0_2000000")
 
 message("Trans TensorQTL window output tests passed")

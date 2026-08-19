@@ -20,9 +20,8 @@ system2(
   )
 )
 
-windows <- read_prepare_window_manifest(file.path(fixture_dir, "windows.tsv"))
 trans_associations <- read_tsv(
-  file.path(fixture_dir, "w1.tensorqtl.tsv.gz"),
+  file.path(fixture_dir, "trans_window_associations.tsv.gz"),
   show_col_types = FALSE
 )
 phenotype_inputs <- tibble(
@@ -31,7 +30,6 @@ phenotype_inputs <- tibble(
 )
 
 with_cis <- prepare_trans_window_data(
-  windows = windows,
   window_id = "w1",
   trans_associations = trans_associations,
   phenotype_inputs = phenotype_inputs,
@@ -55,6 +53,7 @@ stopifnot(
 )
 stopifnot(all(manifest$window_id == "w1"))
 stopifnot(!"ENSG_TRANS_2" %in% manifest$phenotype_id)
+stopifnot(!"ENSG_W2" %in% manifest$phenotype_id)
 stopifnot(
   all(file.exists(file.path(dirname(with_cis$window_phenotypes), manifest$phenotype_file)))
 )
@@ -85,7 +84,6 @@ stopifnot(
 stopifnot(length(unique(manifest$phenotype_file)) == 1L)
 
 without_cis <- prepare_trans_window_data(
-  windows = windows,
   window_id = "w1",
   trans_associations = trans_associations,
   phenotype_inputs = phenotype_inputs,

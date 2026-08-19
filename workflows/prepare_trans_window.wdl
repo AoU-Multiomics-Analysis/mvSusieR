@@ -2,7 +2,6 @@ version 1.0
 
 workflow PrepareTransWindow {
   input {
-    File windows_tsv
     String window_id
     File genome_dosage
     File genome_dosage_tbi
@@ -15,15 +14,14 @@ workflow PrepareTransWindow {
 
   call PrepareWindowGenotypes {
     input:
-      windows_tsv = windows_tsv,
       window_id = window_id,
+      trans_window_associations = trans_window_associations,
       genome_dosage = genome_dosage,
       genome_dosage_tbi = genome_dosage_tbi
   }
 
   call PrepareWindowPhenotypes {
     input:
-      windows_tsv = windows_tsv,
       window_id = window_id,
       trans_window_associations = trans_window_associations,
       phenotype_files = phenotype_files,
@@ -43,7 +41,7 @@ workflow PrepareTransWindow {
 
 task PrepareWindowGenotypes {
   input {
-    File windows_tsv
+    File trans_window_associations
     String window_id
     File genome_dosage
     File genome_dosage_tbi
@@ -63,13 +61,17 @@ task PrepareWindowGenotypes {
         next
       }
       $(column["window_id"]) == requested_id {
-        print $(column["chrom"]) "\t" $(column["start"]) "\t" $(column["end"])
-        matches++
+        row = $(column["chrom"]) "\t" $(column["start"]) "\t" $(column["end"])
+        if (!seen[row]++) {
+          selected = row
+          matches++
+        }
       }
       END {
         if (matches != 1) exit 1
+        print selected
       }
-    ' ~{windows_tsv})"
+    ' <(gzip -cd ~{trans_window_associations}))"
 
     IFS=$'\t' read -r window_chrom window_start window_end <<< "${window_row}"
     tabix -H "${dosage_name}" > output/window_dosage.tsv
@@ -104,7 +106,6 @@ task PrepareWindowGenotypes {
 
 task PrepareWindowPhenotypes {
   input {
-    File windows_tsv
     String window_id
     File trans_window_associations
     Array[File] phenotype_files
@@ -118,7 +119,6 @@ task PrepareWindowPhenotypes {
     test ~{length(phenotype_files)} -gt 0
 
     Rscript /opt/mvsusie/scripts/prepare_trans_window.R \
-      --windows ~{windows_tsv} \
       --window-id ~{window_id} \
       --trans-associations ~{trans_window_associations} \
       --phenotype-files "~{sep="," phenotype_files}" \

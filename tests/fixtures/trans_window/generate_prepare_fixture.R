@@ -15,25 +15,15 @@ dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 write_tsv(
   tibble(
-    window_id = c("w1", "w2"),
-    chrom = c("chr1", "chr1"),
-    start = c(100L, 300L),
-    end = c(200L, 400L)
+    window_id = c("w1", "w1", "w1", "w2"),
+    chrom = c("chr1", "chr1", "chr1", "chr1"),
+    start = c(100L, 100L, 100L, 300L),
+    end = c(200L, 200L, 200L, 400L),
+    modality = c("expression", "splicing", "expression", "expression"),
+    molecular_trait_id = c("ENSG_TRANS", "splice_trans", "ENSG_TRANS_2", "ENSG_W2"),
+    p_value = c(1e-10, 2e-10, 5e-9, 1e-12)
   ),
-  file.path(output_dir, "windows.tsv")
-)
-
-write_tsv(
-  tibble(
-    variant_id = c("chr2:500_A_G", "chr3:600_C_T", "chr2:501_A_G"),
-    phenotype_id = c("ENSG_TRANS", "splice_trans", "ENSG_TRANS_2"),
-    pval = c(1e-10, 2e-10, 5e-9),
-    b = c(0.4, -0.3, 0.2),
-    b_se = c(0.05, 0.04, 0.03),
-    af = c(0.2, 0.3, 0.25),
-    modality = c("expression", "splicing", "expression")
-  ),
-  file.path(output_dir, "w1.tensorqtl.tsv.gz")
+  file.path(output_dir, "trans_window_associations.tsv.gz")
 )
 
 write_tsv(

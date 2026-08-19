@@ -27,6 +27,7 @@ for token in \
   window_manifest \
   phenotype_data \
   tabix \
+  gzip \
   prepare_trans_window.R; do
   rg -q "$token" workflows/prepare_trans_window.wdl
 done
@@ -34,11 +35,18 @@ done
 rg -q 'call PrepareWindowGenotypes' workflows/prepare_trans_window.wdl
 rg -q 'call PrepareWindowPhenotypes' workflows/prepare_trans_window.wdl
 rg -q 'top_n_trans_phenotypes = 25' workflows/prepare_trans_window.wdl
+rg -q 'trans_window_associations = trans_window_associations' workflows/prepare_trans_window.wdl
+rg -q 'distinct coordinates|seen\[row\]' workflows/prepare_trans_window.wdl
 test "$(rg -c 'disks: "local-disk 500 SSD"' workflows/prepare_trans_window.wdl)" -eq 2
 test "$(rg -c 'memory: "16 GiB"' workflows/prepare_trans_window.wdl)" -eq 2
 
 if rg -q 'scatter[[:space:]]*\(' workflows/prepare_trans_window.wdl; then
   echo "The single-window preparation workflow must not scatter." >&2
+  exit 1
+fi
+
+if rg -q 'windows_tsv|--windows' workflows/prepare_trans_window.wdl; then
+  echo "The prepare workflow should use the long trans-window association file for coordinates." >&2
   exit 1
 fi
 

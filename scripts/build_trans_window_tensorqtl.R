@@ -12,8 +12,6 @@ tensorqtl_columns <- c(
   "variant_id", "phenotype_id", "pval", "b", "b_se", "af"
 )
 
-output_columns <- c(tensorqtl_columns, "modality")
-
 require_columns <- function(data, required, label) {
   missing <- setdiff(required, names(data))
 
@@ -37,9 +35,9 @@ parse_variant_locations <- function(associations, window_size_bp) {
       chrom = str_extract(variant_id, "^[^:]+"),
       pos = as.integer(str_extract(variant_id, "(?<=:)[0-9]+"))
     ) %>%
-    filter(!is.na(chrom), !is.na(pos)) %>%
+    filter(!is.na(chrom), !is.na(pos), pos > 0L) %>%
     mutate(
-      window_index = floor(pos / window_size_bp),
+      window_index = floor((pos - 1) / window_size_bp),
       start = window_index * window_size_bp,
       end = (window_index + 1) * window_size_bp,
       window_id = paste(
@@ -73,59 +71,49 @@ build_trans_window_tensorqtl_outputs <- function(
   }
 
   trans <- trans_associations %>%
-    arrange(pval) %>%
-    distinct(variant_id, phenotype_id, modality, .keep_all = TRUE) %>%
-    filter(!is.na(pval), pval < trans_p_threshold) %>%
+    mutate(.p_value = suppressWarnings(as.numeric(.data$pval))) %>%
+    filter(
+      !is.na(.data$.p_value),
+      is.finite(.data$.p_value),
+      .data$.p_value < trans_p_threshold
+    ) %>%
     parse_variant_locations(window_size_bp)
 
   if (nrow(trans) == 0L) {
     stop("No trans associations pass the p-value threshold.", call. = FALSE)
   }
 
-  windows <- trans %>%
-    distinct(window_id, chrom, start, end) %>%
-    arrange(chrom, start)
-
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  associations <- trans %>%
+    transmute(
+      window_id = .data$window_id,
+      chrom = .data$chrom,
+      start = .data$start,
+      end = .data$end,
+      modality = as.character(.data$modality),
+      molecular_trait_id = as.character(.data$phenotype_id),
+      p_value = .data$.p_value
+    ) %>%
+    group_by(
+      .data$window_id,
+      .data$chrom,
+      .data$start,
+      .data$end,
+      .data$modality,
+      .data$molecular_trait_id
+    ) %>%
+    summarise(p_value = min(.data$p_value), .groups = "drop") %>%
+    arrange(.data$chrom, .data$start, .data$modality, .data$p_value, .data$molecular_trait_id)
 
-  association_manifest <- map_dfr(seq_len(nrow(windows)), function(i) {
-    current_window <- windows[i, ]
-    current_window_id <- current_window$window_id[[1L]]
-    safe_id <- str_replace_all(current_window_id, "[^A-Za-z0-9_.-]", "_")
-    association_file <- file.path(
-      output_dir,
-      paste0(safe_id, ".tensorqtl.tsv.gz")
-    )
-
-    window_rows <- trans %>%
-      filter(window_id == current_window_id) %>%
-      select(all_of(output_columns)) %>%
-      arrange(variant_id, phenotype_id) %>%
-      mutate(`__index_level_0__` = row_number() - 1L)
-
-    write_tsv(window_rows, association_file)
-
-    tibble(
-      window_id = current_window_id,
-      association_file = normalizePath(association_file, mustWork = TRUE),
-      n_assoc = nrow(window_rows),
-      n_variants = n_distinct(window_rows$variant_id),
-      n_phenotypes = n_distinct(
-        window_rows$modality,
-        window_rows$phenotype_id
-      )
-    )
-  })
-
-  windows_output <- windows %>%
-    left_join(association_manifest, by = "window_id")
-
-  windows_path <- file.path(output_dir, "windows.tsv")
-  write_tsv(windows_output, windows_path)
+  associations_path <- file.path(
+    output_dir,
+    "trans_window_associations.tsv.gz"
+  )
+  write_tsv(associations, associations_path)
 
   list(
-    windows = windows_output,
-    windows_path = normalizePath(windows_path, mustWork = TRUE)
+    associations = associations,
+    associations_path = normalizePath(associations_path, mustWork = TRUE)
   )
 }
 
@@ -180,8 +168,8 @@ main <- function() {
     trans_p_threshold = as.numeric(args$trans_p_threshold)
   )
 
-  message("Wrote ", nrow(result$windows), " trans windows.")
-  message("Windows: ", result$windows_path)
+  message("Wrote ", nrow(result$associations), " trans-window molecular-trait mappings.")
+  message("Associations: ", result$associations_path)
 }
 
 if (sys.nframe() == 0L) {

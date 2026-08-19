@@ -19,45 +19,69 @@ require_columns <- function(data, required, label) {
   }
 }
 
-read_prepare_window_manifest <- function(path) {
-  windows <- read_tsv(
+normalize_trans_window_associations <- function(data) {
+  require_columns(
+    data,
+    c(
+      "window_id", "chrom", "start", "end", "modality",
+      "molecular_trait_id", "p_value"
+    ),
+    "Trans-window associations"
+  )
+  associations <- data %>%
+    transmute(
+      window_id = as.character(.data$window_id),
+      chrom = as.character(.data$chrom),
+      start = suppressWarnings(as.integer(.data$start)),
+      end = suppressWarnings(as.integer(.data$end)),
+      modality = as.character(.data$modality),
+      molecular_trait_id = as.character(.data$molecular_trait_id),
+      p_value = suppressWarnings(as.numeric(.data$p_value))
+    )
+  if (
+    any(!nzchar(associations$window_id)) ||
+    any(!nzchar(associations$chrom)) ||
+    any(!nzchar(associations$modality)) ||
+    any(!nzchar(associations$molecular_trait_id))
+  ) {
+    stop("Trans-window association identifiers cannot be empty.", call. = FALSE)
+  }
+  if (
+    anyNA(associations$start) || anyNA(associations$end) ||
+    any(associations$start < 0L) || any(associations$end <= associations$start)
+  ) {
+    stop(
+      "Trans-window coordinates must be valid 0-based half-open intervals.",
+      call. = FALSE
+    )
+  }
+  if (anyNA(associations$p_value) || any(!is.finite(associations$p_value))) {
+    stop("Trans-window p-values must be finite numeric values.", call. = FALSE)
+  }
+  associations
+}
+
+read_trans_window_associations <- function(path) {
+  associations <- read_tsv(
     path,
     col_types = cols(.default = col_character()),
     name_repair = "minimal",
     show_col_types = FALSE,
     progress = FALSE
   )
-  require_columns(
-    windows,
-    c("window_id", "chrom", "start", "end"),
-    "Window manifest"
-  )
-  windows <- windows %>%
-    transmute(
-      window_id,
-      chrom,
-      start = suppressWarnings(as.integer(start)),
-      end = suppressWarnings(as.integer(end))
-    )
-  if (anyDuplicated(windows$window_id)) {
-    stop("Window manifest contains duplicate window_id values.", call. = FALSE)
-  }
-  if (
-    any(is.na(windows$start)) || any(is.na(windows$end)) ||
-    any(windows$start < 0L) || any(windows$end <= windows$start)
-  ) {
-    stop(
-      "Window coordinates must be valid 0-based half-open intervals.",
-      call. = FALSE
-    )
-  }
-  windows
+  normalize_trans_window_associations(associations)
 }
 
-select_prepare_window <- function(windows, window_id) {
-  selected <- windows %>% filter(.data$window_id == !!window_id)
+select_prepare_window <- function(trans_associations, window_id) {
+  selected <- trans_associations %>%
+    filter(.data$window_id == !!window_id) %>%
+    distinct(.data$window_id, .data$chrom, .data$start, .data$end)
   if (nrow(selected) != 1L) {
-    stop("Expected exactly one window for window_id: ", window_id, call. = FALSE)
+    stop(
+      "Expected exactly one coordinate interval for window_id: ",
+      window_id,
+      call. = FALSE
+    )
   }
   selected
 }
@@ -65,7 +89,7 @@ select_prepare_window <- function(windows, window_id) {
 select_top_trans_phenotypes <- function(trans_associations, top_n) {
   require_columns(
     trans_associations,
-    c("phenotype_id", "modality", "pval"),
+    c("molecular_trait_id", "modality", "p_value"),
     "Trans associations"
   )
   if (
@@ -76,19 +100,19 @@ select_top_trans_phenotypes <- function(trans_associations, top_n) {
   }
 
   associations <- trans_associations %>%
-    mutate(.pval = suppressWarnings(as.numeric(.data$pval)))
+    mutate(.pval = suppressWarnings(as.numeric(.data$p_value)))
   if (anyNA(associations$.pval) || any(!is.finite(associations$.pval))) {
     stop("Trans association p-values must be finite numeric values.", call. = FALSE)
   }
 
   associations %>%
-    group_by(.data$modality, .data$phenotype_id) %>%
+    group_by(.data$modality, .data$molecular_trait_id) %>%
     summarise(min_pval = min(.data$.pval), .groups = "drop") %>%
     group_by(.data$modality) %>%
-    arrange(.data$min_pval, .data$phenotype_id, .by_group = TRUE) %>%
+    arrange(.data$min_pval, .data$molecular_trait_id, .by_group = TRUE) %>%
     slice_head(n = top_n) %>%
     ungroup() %>%
-    arrange(.data$min_pval, .data$modality, .data$phenotype_id)
+    arrange(.data$min_pval, .data$modality, .data$molecular_trait_id)
 }
 
 read_prepare_phenotype_table <- function(path, modality) {
@@ -187,7 +211,6 @@ write_prepare_phenotype_subset <- function(selected_tables, output_dir) {
 }
 
 prepare_trans_window_data <- function(
-    windows,
     window_id,
     trans_associations,
     phenotype_inputs,
@@ -195,12 +218,13 @@ prepare_trans_window_data <- function(
     extract_cis_window_phenotypes = TRUE,
     top_n_trans_phenotypes = 25L
 ) {
-  window <- select_prepare_window(windows, window_id)
-  require_columns(
-    trans_associations,
-    c("phenotype_id", "modality"),
-    "Trans associations"
-  )
+  trans_associations <- normalize_trans_window_associations(trans_associations)
+  window_associations <- trans_associations %>%
+    filter(.data$window_id == !!window_id)
+  if (!nrow(window_associations)) {
+    stop("No trans associations found for window: ", window_id, call. = FALSE)
+  }
+  window <- select_prepare_window(window_associations, window_id)
   require_columns(
     phenotype_inputs,
     c("modality", "phenotype_file"),
@@ -214,7 +238,7 @@ prepare_trans_window_data <- function(
   }
 
   unknown_modalities <- setdiff(
-    unique(trans_associations$modality),
+    unique(window_associations$modality),
     phenotype_inputs$modality
   )
   if (length(unknown_modalities) > 0L) {
@@ -227,7 +251,7 @@ prepare_trans_window_data <- function(
 
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   trans_associations <- select_top_trans_phenotypes(
-    trans_associations,
+    window_associations,
     top_n = top_n_trans_phenotypes
   )
 
@@ -239,7 +263,7 @@ prepare_trans_window_data <- function(
     )
     trans_ids <- trans_associations %>%
       filter(.data$modality == input$modality[[1L]]) %>%
-      pull(.data$phenotype_id)
+      pull(.data$molecular_trait_id)
     selected <- select_prepare_phenotypes(
       phenotype_table = phenotype_table,
       window = window,
@@ -321,7 +345,6 @@ main <- function() {
   source("scripts/trans_window_cli.R")
   args <- parse_cli_args(
     option_list = list(
-      optparse::make_option("--windows", type = "character"),
       optparse::make_option("--window-id", type = "character"),
       optparse::make_option("--trans-associations", type = "character"),
       optparse::make_option("--phenotype-files", type = "character"),
@@ -353,11 +376,9 @@ main <- function() {
   }
 
   result <- prepare_trans_window_data(
-    windows = read_prepare_window_manifest(require_cli_arg(args, "windows")),
     window_id = require_cli_arg(args, "window_id"),
-    trans_associations = read_tsv(
-      require_cli_arg(args, "trans_associations"),
-      show_col_types = FALSE
+    trans_associations = read_trans_window_associations(
+      require_cli_arg(args, "trans_associations")
     ),
     phenotype_inputs = tibble(
       modality = phenotype_modalities,
