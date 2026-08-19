@@ -5,6 +5,7 @@
 [![Prepare-window genotypes container](https://github.com/AoU-Multiomics-Analysis/mvSusieR/actions/workflows/prepare-window-genotypes-image.yml/badge.svg)](https://github.com/AoU-Multiomics-Analysis/mvSusieR/actions/workflows/prepare-window-genotypes-image.yml)
 [![Prepare-window phenotypes container](https://github.com/AoU-Multiomics-Analysis/mvSusieR/actions/workflows/prepare-window-phenotypes-image.yml/badge.svg)](https://github.com/AoU-Multiomics-Analysis/mvSusieR/actions/workflows/prepare-window-phenotypes-image.yml)
 [![R lint](https://github.com/AoU-Multiomics-Analysis/mvSusieR/actions/workflows/r-lint.yml/badge.svg)](https://github.com/AoU-Multiomics-Analysis/mvSusieR/actions/workflows/r-lint.yml)
+[![Trans-window mvSuSiE container](https://github.com/AoU-Multiomics-Analysis/mvSusieR/actions/workflows/trans-window-mvsusie-image.yml/badge.svg)](https://github.com/AoU-Multiomics-Analysis/mvSusieR/actions/workflows/trans-window-mvsusie-image.yml)
 [![Update README workflow badges](https://github.com/AoU-Multiomics-Analysis/mvSusieR/actions/workflows/update-readme-badges.yml/badge.svg)](https://github.com/AoU-Multiomics-Analysis/mvSusieR/actions/workflows/update-readme-badges.yml)
 [![WDL validation](https://github.com/AoU-Multiomics-Analysis/mvSusieR/actions/workflows/wdl-validation.yml/badge.svg)](https://github.com/AoU-Multiomics-Analysis/mvSusieR/actions/workflows/wdl-validation.yml)
 <!-- workflow-badges:end -->
