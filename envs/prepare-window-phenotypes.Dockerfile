@@ -18,6 +18,7 @@ RUN install2.r --error --skipinstalled --ncpus -1 \
     dplyr \
     purrr \
     readr \
+    stringr \
     tibble
 
 COPY scripts/prepare_trans_window.R scripts/trans_window_cli.R /opt/mvsusie/scripts/
