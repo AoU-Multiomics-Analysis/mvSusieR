@@ -63,6 +63,35 @@ select_prepare_window <- function(windows, window_id) {
   selected
 }
 
+select_top_trans_phenotypes <- function(trans_associations, top_n) {
+  require_columns(
+    trans_associations,
+    c("phenotype_id", "modality", "pval"),
+    "Trans associations"
+  )
+  if (
+    length(top_n) != 1L || is.na(top_n) ||
+    top_n < 1L || top_n != as.integer(top_n)
+  ) {
+    stop("top_n must be a positive integer.", call. = FALSE)
+  }
+
+  associations <- trans_associations %>%
+    mutate(.pval = suppressWarnings(as.numeric(.data$pval)))
+  if (anyNA(associations$.pval) || any(!is.finite(associations$.pval))) {
+    stop("Trans association p-values must be finite numeric values.", call. = FALSE)
+  }
+
+  associations %>%
+    group_by(.data$modality, .data$phenotype_id) %>%
+    summarise(min_pval = min(.data$.pval), .groups = "drop") %>%
+    group_by(.data$modality) %>%
+    arrange(.data$min_pval, .data$phenotype_id, .by_group = TRUE) %>%
+    slice_head(n = top_n) %>%
+    ungroup() %>%
+    arrange(.data$min_pval, .data$modality, .data$phenotype_id)
+}
+
 read_prepare_phenotype_table <- function(path, modality) {
   phenotype_table <- read_tsv(
     path,
@@ -163,7 +192,8 @@ prepare_trans_window_data <- function(
     trans_associations,
     phenotype_inputs,
     output_dir,
-    extract_cis_window_phenotypes = TRUE
+    extract_cis_window_phenotypes = TRUE,
+    top_n_trans_phenotypes = 25L
 ) {
   window <- select_prepare_window(windows, window_id)
   require_columns(
@@ -196,8 +226,10 @@ prepare_trans_window_data <- function(
   }
 
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-  trans_associations <- trans_associations %>%
-    distinct(.data$phenotype_id, .data$modality)
+  trans_associations <- select_top_trans_phenotypes(
+    trans_associations,
+    top_n = top_n_trans_phenotypes
+  )
 
   per_modality <- map_dfr(seq_len(nrow(phenotype_inputs)), function(index) {
     input <- phenotype_inputs[index, ]
@@ -229,6 +261,7 @@ prepare_trans_window_data <- function(
       phenotype_file = basename(subset_path),
       n_input = selected$n_input,
       n_trans = selected$n_trans,
+      n_trans_selected = length(trans_ids),
       n_cis = selected$n_cis,
       n_retained = selected$n_retained
     )
@@ -247,8 +280,19 @@ prepare_trans_window_data <- function(
   qc_path <- file.path(output_dir, "window_qc.tsv")
   write_tsv(
     per_modality %>%
-      distinct(.data$window_id, .data$modality, .data$n_input, .data$n_trans, .data$n_cis, .data$n_retained) %>%
-      mutate(extract_cis_window_phenotypes = extract_cis_window_phenotypes),
+      distinct(
+        .data$window_id,
+        .data$modality,
+        .data$n_input,
+        .data$n_trans,
+        .data$n_trans_selected,
+        .data$n_cis,
+        .data$n_retained
+      ) %>%
+      mutate(
+        top_n_trans_phenotypes = top_n_trans_phenotypes,
+        extract_cis_window_phenotypes = extract_cis_window_phenotypes
+      ),
     qc_path
   )
 
@@ -269,6 +313,11 @@ main <- function() {
       optparse::make_option("--trans-associations", type = "character"),
       optparse::make_option("--phenotype-files", type = "character"),
       optparse::make_option("--phenotype-modalities", type = "character"),
+      optparse::make_option(
+        "--top-n-trans-phenotypes",
+        type = "integer",
+        default = 25L
+      ),
       optparse::make_option(
         "--extract-cis-window-phenotypes",
         type = "logical",
@@ -302,7 +351,8 @@ main <- function() {
       phenotype_file = phenotype_files
     ),
     output_dir = require_cli_arg(args, "output_dir"),
-    extract_cis_window_phenotypes = args$extract_cis_window_phenotypes
+    extract_cis_window_phenotypes = args$extract_cis_window_phenotypes,
+    top_n_trans_phenotypes = as_cli_integer(args, "top_n_trans_phenotypes", 25L)
   )
 
   message("Prepared window ", result$window_id, ".")

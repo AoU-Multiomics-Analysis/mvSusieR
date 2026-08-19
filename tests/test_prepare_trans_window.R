@@ -36,7 +36,8 @@ with_cis <- prepare_trans_window_data(
   trans_associations = trans_associations,
   phenotype_inputs = phenotype_inputs,
   output_dir = file.path(fixture_dir, "with_cis"),
-  extract_cis_window_phenotypes = TRUE
+  extract_cis_window_phenotypes = TRUE,
+  top_n_trans_phenotypes = 1L
 )
 
 stopifnot(!"window_dosage" %in% names(with_cis))
@@ -53,8 +54,15 @@ stopifnot(
   )
 )
 stopifnot(all(manifest$window_id == "w1"))
+stopifnot(!"ENSG_TRANS_2" %in% manifest$phenotype_id)
 stopifnot(
   all(file.exists(file.path(dirname(with_cis$window_phenotypes), "phenotype_subsets", manifest$phenotype_file)))
+)
+
+qc <- read_tsv(with_cis$window_qc, show_col_types = FALSE)
+stopifnot(
+  all(qc$top_n_trans_phenotypes == 1L),
+  sum(qc$n_trans_selected) == 2L
 )
 
 expression_subset <- read_tsv(
@@ -73,7 +81,8 @@ without_cis <- prepare_trans_window_data(
   trans_associations = trans_associations,
   phenotype_inputs = phenotype_inputs,
   output_dir = file.path(fixture_dir, "without_cis"),
-  extract_cis_window_phenotypes = FALSE
+  extract_cis_window_phenotypes = FALSE,
+  top_n_trans_phenotypes = 1L
 )
 
 manifest_without_cis <- read_tsv(
