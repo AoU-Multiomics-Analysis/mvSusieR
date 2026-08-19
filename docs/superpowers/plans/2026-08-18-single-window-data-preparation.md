@@ -4,7 +4,7 @@
 
 **Goal:** Add a non-scattered WDL workflow and tidyverse R entrypoint that prepare one mvSuSiE window bundle per invocation from a full windows table, tabix-indexed genome-wide dosage, gzipped phenotype BED files, and one window’s trans associations.
 
-**Architecture:** The caller supplies exactly one `window_id`; an independent genotype task uses `tabix` to write the dosage subset and one-row dosage manifest, while an independent phenotype task resolves the window, reads each phenotype BED fully into memory, retains matching trans phenotypes and optionally all coordinate-overlapping cis phenotypes, and writes per-modality subset BED files plus a downstream-compatible phenotype manifest and QC table. Neither task scatters over the windows table.
+**Architecture:** The caller supplies exactly one `window_id`; an independent genotype task uses `tabix` to write the dosage subset and one-row dosage manifest, while an independent phenotype task resolves the window, reads each phenotype BED fully into memory, retains matching trans phenotypes and optionally all coordinate-overlapping cis phenotypes, and writes one combined phenotype BED plus a modality key and QC table. Neither task scatters over the windows table.
 
 **Tech Stack:** WDL 1.1, R, tidyverse (`dplyr`, `purrr`, `readr`, `stringr`, `tibble`), `optparse`, `tabix`.
 
@@ -28,7 +28,7 @@
 
 **Interfaces:**
 - Consumes: the planned `prepare_trans_window_data()` function and its standard BED assumptions.
-- Produces: executable tests for trans-only selection, cis overlap selection, compressed input handling, and one-window manifest output.
+- Produces: executable tests for trans-only selection, cis overlap selection, compressed input handling, combined phenotype output, and one-window manifest output.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -45,7 +45,7 @@
 
 **Interfaces:**
 - `read_prepare_window_manifest(path)` returns a validated tibble with one row per `window_id`.
-- `prepare_trans_window_data(windows, window_id, trans_associations, phenotype_inputs, output_dir, extract_cis_window_phenotypes = TRUE)` returns paths and counts for the phenotype bundle.
+- `prepare_trans_window_data(windows, window_id, trans_associations, phenotype_inputs, output_dir, extract_cis_window_phenotypes = TRUE)` returns the combined phenotype BED, modality key, and QC paths for the phenotype bundle.
 - CLI accepts `--windows`, `--window-id`, `--trans-associations`, `--phenotype-files`, `--phenotype-modalities`, `--output-dir`, and `--extract-cis-window-phenotypes`.
 
 - [ ] **Step 1: Implement validation and selection helpers**
@@ -62,7 +62,7 @@
 
 **Interfaces:**
 - Workflow `PrepareTransWindow` accepts one `windows_tsv`, one `window_id`, one `genome_dosage` plus its tabix index, one `trans_window_associations`, and parallel `phenotype_files`/`phenotype_modalities` arrays.
-- Genotype outputs are `window_dosage` and `window_manifest`; phenotype outputs are `window_phenotypes`, `phenotype_subsets`, and `window_qc` for that one window.
+- Genotype outputs are `window_dosage` and `window_manifest`; phenotype outputs are `window_phenotypes`, `phenotype_data`, and `window_qc` for that one window.
 
 - [ ] **Step 1: Define the single-call workflow with independent genotype and phenotype calls**
 - [ ] **Step 2: Extract the requested genomic interval with tabix in `PrepareWindowGenotypes`**

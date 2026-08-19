@@ -4,7 +4,6 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(purrr)
   library(readr)
-  library(stringr)
   library(tibble)
 })
 
@@ -170,18 +169,19 @@ select_prepare_phenotypes <- function(
   )
 }
 
-write_prepare_phenotype_subset <- function(selected, modality, output_dir, window_id) {
-  subset_dir <- file.path(output_dir, "phenotype_subsets")
-  dir.create(subset_dir, recursive = TRUE, showWarnings = FALSE)
-  safe_modality <- str_replace_all(modality, "[^A-Za-z0-9_.-]", "_")
-  safe_window_id <- str_replace_all(window_id, "[^A-Za-z0-9_.-]", "_")
-  output_path <- file.path(
-    subset_dir,
-    paste0(safe_window_id, ".", safe_modality, ".bed.gz")
-  )
-
-  output_table <- selected %>%
-    select(-starts_with("."))
+write_prepare_phenotype_subset <- function(selected_tables, output_dir) {
+  output_path <- file.path(output_dir, "window_phenotypes.bed.gz")
+  output_tables <- map(selected_tables, function(selected) {
+    selected %>% select(-starts_with("."))
+  })
+  if (length(unique(map(output_tables, names))) != 1L) {
+    stop(
+      "Phenotype files must have identical metadata and sample columns.",
+      call. = FALSE
+    )
+  }
+  output_table <- bind_rows(output_tables)
+  names(output_table)[seq_len(4L)] <- c("chrom", "start", "end", "phenotype_id")
   write_tsv(output_table, output_path)
   normalizePath(output_path, mustWork = TRUE)
 }
@@ -231,7 +231,7 @@ prepare_trans_window_data <- function(
     top_n = top_n_trans_phenotypes
   )
 
-  per_modality <- map_dfr(seq_len(nrow(phenotype_inputs)), function(index) {
+  per_modality_results <- map(seq_len(nrow(phenotype_inputs)), function(index) {
     input <- phenotype_inputs[index, ]
     phenotype_table <- read_prepare_phenotype_table(
       input$phenotype_file[[1L]],
@@ -246,29 +246,42 @@ prepare_trans_window_data <- function(
       trans_ids = trans_ids,
       extract_cis_window_phenotypes = extract_cis_window_phenotypes
     )
-    if (selected$n_retained == 0L) return(tibble())
-
-    subset_path <- write_prepare_phenotype_subset(
-      selected$table,
-      input$modality[[1L]],
-      output_dir,
-      window_id
+    if (selected$n_retained == 0L) return(NULL)
+    list(
+      modality = input$modality[[1L]],
+      trans_ids = trans_ids,
+      selected = selected
     )
+  })
+  per_modality_results <- compact(per_modality_results)
+
+  if (length(per_modality_results) == 0L) {
+    stop("No trans or cis phenotypes were selected for window: ", window_id, call. = FALSE)
+  }
+
+  phenotype_data_path <- write_prepare_phenotype_subset(
+    map(per_modality_results, "selected") %>% map("table"),
+    output_dir
+  )
+  per_modality <- map_dfr(per_modality_results, function(result) {
+    selected <- result$selected
     tibble(
       window_id = window_id,
       phenotype_id = selected$table$.phenotype_id,
-      modality = input$modality[[1L]],
-      phenotype_file = basename(subset_path),
+      modality = result$modality,
+      phenotype_file = basename(phenotype_data_path),
       n_input = selected$n_input,
       n_trans = selected$n_trans,
-      n_trans_selected = length(trans_ids),
+      n_trans_selected = length(result$trans_ids),
       n_cis = selected$n_cis,
       n_retained = selected$n_retained
     )
   })
-
-  if (nrow(per_modality) == 0L) {
-    stop("No trans or cis phenotypes were selected for window: ", window_id, call. = FALSE)
+  if (anyDuplicated(per_modality$phenotype_id)) {
+    stop(
+      "Phenotype IDs must be unique across modalities for a combined file.",
+      call. = FALSE
+    )
   }
 
   manifest_path <- file.path(output_dir, "window_phenotypes.tsv")
@@ -298,8 +311,8 @@ prepare_trans_window_data <- function(
 
   list(
     window_id = window_id,
+    phenotype_data = phenotype_data_path,
     window_phenotypes = normalizePath(manifest_path, mustWork = TRUE),
-    phenotype_subsets = unique(file.path(output_dir, "phenotype_subsets", basename(per_modality$phenotype_file))),
     window_qc = normalizePath(qc_path, mustWork = TRUE)
   )
 }

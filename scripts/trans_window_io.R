@@ -164,16 +164,29 @@ read_window_phenotypes <- function(window_id, phenotype_manifest, phenotype_file
   if (!nrow(rows)) {
     stop("No phenotype rows found for window: ", window_id, call. = FALSE)
   }
-  parts <- lapply(seq_len(nrow(rows)), function(i) {
-    source_file <- resolve_file_reference(rows$phenotype_file[[i]], phenotype_files)
-    read_phenotype_rows(source_file, rows$modality[[i]], rows$phenotype_id[[i]])
+  grouped_rows <- split(seq_len(nrow(rows)), rows$phenotype_file)
+  parts <- lapply(grouped_rows, function(indices) {
+    source_file <- resolve_file_reference(rows$phenotype_file[[indices[[1L]]]], phenotype_files)
+    list(
+      indices = indices,
+      data = read_phenotype_rows(
+        source_file,
+        rows$modality[[indices[[1L]]]],
+        rows$phenotype_id[indices]
+      )
+    )
   })
-  common_samples <- Reduce(intersect, lapply(parts, `[[`, "sample_ids"))
+  common_samples <- Reduce(intersect, lapply(parts, function(part) part$data$sample_ids))
   if (!length(common_samples)) {
     stop("No shared phenotype samples for window: ", window_id, call. = FALSE)
   }
-  Y <- do.call(cbind, lapply(parts, function(part) part$Y[common_samples, , drop = FALSE]))
-  metadata <- rbindlist(lapply(parts, `[[`, "metadata"), fill = TRUE)
+  Y <- do.call(cbind, lapply(parts, function(part) {
+    part$data$Y[common_samples, , drop = FALSE]
+  }))
+  column_order <- order(unlist(lapply(parts, `[[`, "indices")))
+  Y <- Y[, column_order, drop = FALSE]
+  metadata <- rbindlist(lapply(parts, function(part) part$data$metadata), fill = TRUE)
+  metadata <- metadata[column_order]
   list(
     Y = Y,
     metadata = metadata,

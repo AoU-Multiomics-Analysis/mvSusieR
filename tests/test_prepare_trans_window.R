@@ -43,8 +43,8 @@ with_cis <- prepare_trans_window_data(
 stopifnot(!"window_dosage" %in% names(with_cis))
 stopifnot(!"window_manifest" %in% names(with_cis))
 stopifnot(file.exists(with_cis$window_phenotypes))
+stopifnot(file.exists(with_cis$phenotype_data))
 stopifnot(file.exists(with_cis$window_qc))
-stopifnot(length(with_cis$phenotype_subsets) == 2L)
 
 manifest <- read_tsv(with_cis$window_phenotypes, show_col_types = FALSE)
 stopifnot(
@@ -56,7 +56,7 @@ stopifnot(
 stopifnot(all(manifest$window_id == "w1"))
 stopifnot(!"ENSG_TRANS_2" %in% manifest$phenotype_id)
 stopifnot(
-  all(file.exists(file.path(dirname(with_cis$window_phenotypes), "phenotype_subsets", manifest$phenotype_file)))
+  all(file.exists(file.path(dirname(with_cis$window_phenotypes), manifest$phenotype_file)))
 )
 
 qc <- read_tsv(with_cis$window_qc, show_col_types = FALSE)
@@ -65,15 +65,23 @@ stopifnot(
   sum(qc$n_trans_selected) == 2L
 )
 
-expression_subset <- read_tsv(
-  file.path(
-    dirname(with_cis$window_phenotypes),
-    "phenotype_subsets",
-    unique(manifest$phenotype_file[manifest$modality == "expression"])
-  ),
-  show_col_types = FALSE
+source("scripts/trans_window_io.R")
+combined_manifest <- read_window_phenotypes_manifest(with_cis$window_phenotypes)
+combined_reader <- read_window_phenotypes(
+  window_id = "w1",
+  phenotype_manifest = combined_manifest,
+  phenotype_files = with_cis$phenotype_data
 )
-stopifnot(identical(expression_subset$phenotype_id, c("ENSG_CIS", "ENSG_TRANS")))
+stopifnot(identical(combined_reader$phenotype_ids, manifest$phenotype_id))
+
+combined_phenotypes <- read_tsv(with_cis$phenotype_data, show_col_types = FALSE)
+stopifnot(
+  identical(
+    combined_phenotypes$phenotype_id,
+    c("ENSG_CIS", "ENSG_TRANS", "splice_cis", "splice_trans")
+  )
+)
+stopifnot(length(unique(manifest$phenotype_file)) == 1L)
 
 without_cis <- prepare_trans_window_data(
   windows = windows,

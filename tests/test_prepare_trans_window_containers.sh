@@ -15,7 +15,7 @@ rg -q 'tabix' envs/prepare-window-genotypes.Dockerfile
 
 rg -q '^FROM rocker/r-ver:' envs/prepare-window-phenotypes.Dockerfile
 rg -q 'optparse' envs/prepare-window-phenotypes.Dockerfile
-for package in dplyr purrr readr stringr tibble; do
+for package in dplyr purrr readr tibble; do
   rg -q "^[[:space:]]+${package}([[:space:]]|$)" envs/prepare-window-phenotypes.Dockerfile
 done
 rg -q 'COPY scripts/prepare_trans_window[.]R scripts/trans_window_cli[.]R /opt/mvsusie/scripts/' envs/prepare-window-phenotypes.Dockerfile

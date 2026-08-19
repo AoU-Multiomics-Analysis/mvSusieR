@@ -18,6 +18,7 @@ for token in \
   top_n_trans_phenotypes \
   top-n-trans-phenotypes \
   window_manifest \
+  phenotype_data \
   tabix \
   prepare_trans_window.R; do
   rg -q "$token" workflows/prepare_trans_window.wdl

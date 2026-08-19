@@ -29,6 +29,7 @@ workflow PrepareTransWindow {
       windows_tsv = windows_tsv,
       window_id = window_id,
       trans_window_associations = trans_window_associations,
+      phenotype_files = phenotype_files,
       phenotype_files_csv = phenotype_files_csv,
       phenotype_modalities_csv = phenotype_modalities_csv,
       extract_cis_window_phenotypes = extract_cis_window_phenotypes,
@@ -39,7 +40,7 @@ workflow PrepareTransWindow {
     File window_dosage = PrepareWindowGenotypes.window_dosage
     File window_manifest = PrepareWindowGenotypes.window_manifest
     File window_phenotypes = PrepareWindowPhenotypes.window_phenotypes
-    Array[File] phenotype_subsets = PrepareWindowPhenotypes.phenotype_subsets
+    File phenotype_data = PrepareWindowPhenotypes.phenotype_data
     File window_qc = PrepareWindowPhenotypes.window_qc
   }
 }
@@ -109,6 +110,7 @@ task PrepareWindowPhenotypes {
     File windows_tsv
     String window_id
     File trans_window_associations
+    Array[File] phenotype_files
     String phenotype_files_csv
     String phenotype_modalities_csv
     Boolean extract_cis_window_phenotypes
@@ -117,6 +119,7 @@ task PrepareWindowPhenotypes {
 
   command <<<
     set -euo pipefail
+    test ~{length(phenotype_files)} -gt 0
 
     Rscript /opt/mvsusie/scripts/prepare_trans_window.R \
       --windows ~{windows_tsv} \
@@ -131,7 +134,7 @@ task PrepareWindowPhenotypes {
 
   output {
     File window_phenotypes = "output/window_phenotypes.tsv"
-    Array[File] phenotype_subsets = glob("output/phenotype_subsets/*.bed.gz")
+    File phenotype_data = "output/window_phenotypes.bed.gz"
     File window_qc = "output/window_qc.tsv"
   }
 
