@@ -80,7 +80,7 @@ Static tests will verify:
 - the expected workflow/task names, parameters, GenMap commands, outputs, logging, and runtime settings are present;
 - the environment uses conda-forge and bioconda and contains GenMap and bedtools;
 - Dockstore points to the correct WDL;
-- the container smoke test can produce a nonempty low-mappability BED from a tiny reference.
+- the container smoke test can produce a nonempty GenMap BEDGraph and process an interval with BEDTools from a tiny reference.
 
 ## Non-goals
 

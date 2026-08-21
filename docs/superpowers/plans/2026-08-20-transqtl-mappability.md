@@ -46,7 +46,7 @@ Create a Bash test that requires `conda-forge`, `bioconda`, `genmap`, and `bedto
 
 - [ ] **Step 4: Write the container smoke-test contract**
 
-Create a Bash test that builds `envs/transqtl-mappability.Dockerfile`, verifies `genmap --version`, `bedtools --version`, and `command -v` under `/bin/bash`, then runs GenMap on a small synthetic FASTA and asserts that the generated low-mappability BED is nonempty. The test will use a repeated sequence in the tiny FASTA so `(20,2)` produces at least one score below `1`.
+Create a Bash test that builds `envs/transqtl-mappability.Dockerfile`, verifies `genmap --version`, `bedtools --version`, and `command -v` under `/bin/bash`, then runs GenMap on a small synthetic FASTA and asserts that the generated BEDGraph is nonempty and BEDTools can sort and merge an interval from it.
 
 - [ ] **Step 5: Run the tests to verify the red state**
 
