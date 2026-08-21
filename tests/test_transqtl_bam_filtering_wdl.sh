@@ -9,6 +9,7 @@ miniwdl check workflows/transqtl_bam_filtering.wdl
 for token in \
   TransQTLBamFiltering \
   FilterTransQTLBam \
+  write_filter_metrics \
   input_bam \
   input_bai \
   low_mappability_bed \
@@ -42,6 +43,12 @@ for token in \
   'Completed TransQTLBamFiltering'; do
   rg -q "$token" workflows/transqtl_bam_filtering.wdl
 done
+
+rg -q 'Boolean write_filter_metrics = true' workflows/transqtl_bam_filtering.wdl
+rg -q 'write_filter_metrics = write_filter_metrics' workflows/transqtl_bam_filtering.wdl
+rg -q 'File\? filter_metrics' workflows/transqtl_bam_filtering.wdl
+rg -q 'if \[ "~\{write_filter_metrics\}" = "true" \]' workflows/transqtl_bam_filtering.wdl
+rg -q 'filter_metrics = FilterTransQTLBam.filter_metrics' workflows/transqtl_bam_filtering.wdl
 
 rg -q 'outFilterMultimapNmax|mappability_threshold' workflows/transqtl_bam_filtering.wdl
 rg -q 'low_mappability_bed' workflows/transqtl_bam_filtering.wdl

@@ -42,6 +42,8 @@ Other defaults:
   behavior is specifically required.
 - `threads = 4`.
 - `mappability_threshold = 1.0`, recorded in the metrics as provenance.
+- `write_filter_metrics = true`; set `false` to skip the filtering summary
+  calculations and leave the optional `filter_metrics` output undefined.
 
 ## Outputs
 
@@ -52,6 +54,9 @@ The workflow emits:
 - filtering metrics and filtered BAM `flagstat` output; and
 - RNA-SeQC2 gene-level read counts (`gene_reads.gct`), TPMs (`gene_tpm.gct`),
   metrics, and coverage tables.
+
+The filtering metrics file is emitted only when `write_filter_metrics` is
+`true`.
 
 The filtering metrics distinguish alignment records from read templates and
 report totals before/after filtering. Filter-specific counts can overlap:
@@ -68,4 +73,3 @@ miniwdl run workflows/transqtl_bam_filtering.wdl \
 The BAM-filtering image is published as
 `ghcr.io/aou-multiomics-analysis/transqtl-bam-filtering` by
 `.github/workflows/transqtl-bam-filtering-image.yml`.
-
