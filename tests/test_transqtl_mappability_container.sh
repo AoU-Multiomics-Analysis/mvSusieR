@@ -24,7 +24,10 @@ docker run --rm \
     tmpdir="$(mktemp -d)"
     trap '\''rm -rf "$tmpdir"'\'' EXIT
     {
-      printf '\''>chrTiny\n'\''
+      printf '\''>chrTinyA\n'\''
+      printf '\''ACGT%.0s'\'' {1..80}
+      printf '\''\n'\''
+      printf '\''>chrTinyB\n'\''
       printf '\''ACGT%.0s'\'' {1..80}
       printf '\''\n'\''
     } > "$tmpdir/reference.fa"
@@ -33,6 +36,8 @@ docker run --rm \
     bedgraph="$(find "$tmpdir" -type f \( -name "*.bedGraph" -o -name "*.bg" \) -print -quit)"
     test -n "$bedgraph"
     test -s "$bedgraph"
+    low_records="$(awk '\''$4 < 1 { n++ } END { print n + 0 }'\'' "$bedgraph")"
+    test "$low_records" -gt 0
     awk '\''BEGIN { OFS = "\t" } $4 < 1 { print $1, $2, $3 }'\'' "$bedgraph" \
       | bedtools sort \
       | bedtools merge \
