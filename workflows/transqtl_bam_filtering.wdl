@@ -12,6 +12,7 @@ workflow TransQTLBamFiltering {
     String strandedness = "rf"
     Boolean legacy = false
     Boolean write_filter_metrics = true
+    Int preemptible_tries = 1
     Int threads = 4
   }
 
@@ -27,6 +28,7 @@ workflow TransQTLBamFiltering {
       strandedness = strandedness,
       legacy = legacy,
       write_filter_metrics = write_filter_metrics,
+      preemptible_tries = preemptible_tries,
       threads = threads
   }
 
@@ -55,6 +57,7 @@ task FilterTransQTLBam {
     String strandedness
     Boolean legacy
     Boolean write_filter_metrics
+    Int preemptible_tries
     Int threads
   }
 
@@ -66,7 +69,7 @@ task FilterTransQTLBam {
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2
     }
 
-    log "Starting TransQTLBamFiltering for sample ~{sample_id} with ~{threads} threads"
+    log "Starting TransQTLBamFiltering for sample ~{sample_id} with ~{threads} threads and ~{preemptible_tries} preemptible tries"
 
     if [ ~{threads} -lt 1 ]; then
       echo "threads must be at least 1" >&2
@@ -291,5 +294,6 @@ task FilterTransQTLBam {
     cpu: threads
     memory: "16 GiB"
     disks: "local-disk 500 SSD"
+    preemptible: preemptible_tries
   }
 }

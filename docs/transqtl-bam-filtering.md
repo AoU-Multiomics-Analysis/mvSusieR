@@ -44,6 +44,8 @@ Other defaults:
 - `mappability_threshold = 1.0`, recorded in the metrics as provenance.
 - `write_filter_metrics = true`; set `false` to skip the filtering summary
   calculations and leave the optional `filter_metrics` output undefined.
+- `preemptible_tries = 1`; increase this to allow retries on preemptible/spot
+  instances when supported by the execution backend.
 
 ## Outputs
 

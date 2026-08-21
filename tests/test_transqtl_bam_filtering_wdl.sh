@@ -10,6 +10,7 @@ for token in \
   TransQTLBamFiltering \
   FilterTransQTLBam \
   write_filter_metrics \
+  preemptible_tries \
   input_bam \
   input_bai \
   low_mappability_bed \
@@ -46,6 +47,9 @@ done
 
 rg -q 'Boolean write_filter_metrics = true' workflows/transqtl_bam_filtering.wdl
 rg -q 'write_filter_metrics = write_filter_metrics' workflows/transqtl_bam_filtering.wdl
+rg -q 'Int preemptible_tries = 1' workflows/transqtl_bam_filtering.wdl
+rg -q 'preemptible_tries = preemptible_tries' workflows/transqtl_bam_filtering.wdl
+rg -q 'preemptible: preemptible_tries' workflows/transqtl_bam_filtering.wdl
 rg -q 'File\? filter_metrics' workflows/transqtl_bam_filtering.wdl
 rg -q 'if \[ "~\{write_filter_metrics\}" = "true" \]' workflows/transqtl_bam_filtering.wdl
 rg -q 'filter_metrics = FilterTransQTLBam.filter_metrics' workflows/transqtl_bam_filtering.wdl
