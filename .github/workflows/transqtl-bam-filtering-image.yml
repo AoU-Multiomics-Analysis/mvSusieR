@@ -54,6 +54,12 @@ jobs:
       - name: Verify RNA-SeQC2
         run: docker run --rm transqtl-bam-filtering-ci:latest rnaseqc --version
 
+      - name: Verify tools without micromamba entrypoint
+        run: >-
+          docker run --rm --entrypoint /bin/bash
+          transqtl-bam-filtering-ci:latest
+          -c 'command -v samtools && command -v rnaseqc'
+
       - name: Verify micromamba environment
         run: docker run --rm transqtl-bam-filtering-ci:latest micromamba list --name base
 
