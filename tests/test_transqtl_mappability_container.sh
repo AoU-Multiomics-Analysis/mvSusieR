@@ -28,7 +28,7 @@ docker run --rm \
       printf '\''ACGT%.0s'\'' {1..80}
       printf '\''\n'\''
     } > "$tmpdir/reference.fa"
-    mkdir -p "$tmpdir/index" "$tmpdir/output"
+    mkdir -p "$tmpdir/output"
     genmap index -F "$tmpdir/reference.fa" -I "$tmpdir/index"
     genmap map -K 20 -E 2 -I "$tmpdir/index" -O "$tmpdir/output" -t -w -bg
     bedgraph="$(find "$tmpdir/output" -type f -name "*.bedGraph" -print -quit)"
