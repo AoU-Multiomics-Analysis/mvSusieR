@@ -90,9 +90,9 @@ task GenerateTransQTLMappability {
       -bg
 
     if [ "${reference_sequence_count}" -gt 1 ]; then
-      mappability_source="$(find genmap_output -type f \( -name '*.bedGraph' -o -name '*.bg' \) -print -quit)"
+      mappability_source="$(find genmap_output -type f \( -name '*.bedGraph' -o -name '*.bedgraph' -o -name '*.bg' \) -print -quit)"
     else
-      mappability_source="$(find . -type f \( -name '*.bedGraph' -o -name '*.bg' \) -print -quit)"
+      mappability_source="$(find . -type f \( -name '*.bedGraph' -o -name '*.bedgraph' -o -name '*.bg' \) -print -quit)"
     fi
     if [ -z "${mappability_source}" ]; then
       echo "GenMap did not produce a BEDGraph" >&2
