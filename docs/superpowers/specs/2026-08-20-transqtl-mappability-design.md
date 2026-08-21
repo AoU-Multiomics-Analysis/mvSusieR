@@ -25,7 +25,7 @@ GenMap will build an index from the input FASTA and compute `(k,e)` mappability:
 - `max_mismatches`: default `2`.
 - `mappability_threshold`: default `1.0`; intervals with a score below this value are emitted as low mappability.
 
-The workflow will run GenMap with its text, WIG, and BEDGraph outputs enabled. It will normalize the generated BEDGraph, select records with score `< mappability_threshold`, sort and merge adjacent/overlapping intervals, and write a three-column BED suitable for `samtools view -L`.
+The workflow will run GenMap with its text, WIG, and BEDGraph outputs enabled. It will normalize the generated BEDGraph, select records with score `< mappability_threshold`, sort and merge adjacent/overlapping intervals, and write a three-column BED suitable for `samtools view -L`. The full BEDGraph must be nonempty; an empty low-mappability BED is valid for a reference with no intervals below the threshold.
 
 ### WDL interface
 

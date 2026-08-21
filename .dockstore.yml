@@ -12,3 +12,6 @@ workflows:
   - name: transqtl-bam-filtering
     subclass: WDL
     primaryDescriptorPath: /workflows/transqtl_bam_filtering.wdl
+  - name: transqtl-mappability
+    subclass: WDL
+    primaryDescriptorPath: /workflows/transqtl_mappability.wdl

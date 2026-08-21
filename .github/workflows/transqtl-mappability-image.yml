@@ -1,0 +1,99 @@
+name: TransQTL mappability container
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".dockstore.yml"
+      - ".github/workflows/transqtl-mappability-image.yml"
+      - "envs/transqtl-mappability.Dockerfile"
+      - "envs/transqtl-mappability.environment.yml"
+      - "tests/test_transqtl_mappability_*.sh"
+      - "workflows/transqtl_mappability.wdl"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".dockstore.yml"
+      - ".github/workflows/transqtl-mappability-image.yml"
+      - "envs/transqtl-mappability.Dockerfile"
+      - "envs/transqtl-mappability.environment.yml"
+      - "tests/test_transqtl_mappability_*.sh"
+      - "workflows/transqtl_mappability.wdl"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/transqtl-mappability
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install miniwdl
+        run: pipx install miniwdl
+
+      - name: Validate WDL and metadata
+        run: |
+          bash tests/test_transqtl_mappability_wdl.sh
+          bash tests/test_transqtl_mappability_metadata.sh
+          bash tests/test_transqtl_mappability_micromamba.sh
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image for smoke test
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./envs/transqtl-mappability.Dockerfile
+          load: true
+          push: false
+          tags: transqtl-mappability-ci:latest
+
+      - name: Verify GenMap and bedtools
+        run: |
+          docker run --rm transqtl-mappability-ci:latest genmap --version
+          docker run --rm transqtl-mappability-ci:latest bedtools --version
+          docker run --rm --entrypoint /bin/bash transqtl-mappability-ci:latest \
+            -c 'command -v genmap && command -v bedtools'
+
+      - name: Run synthetic mappability smoke test
+        env:
+          TRANSQTL_MAPPABILITY_TEST_IMAGE: transqtl-mappability-ci:latest
+        run: bash tests/test_transqtl_mappability_container.sh
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        if: github.event_name != 'pull_request'
+        id: metadata
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Publish image
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./envs/transqtl-mappability.Dockerfile
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
