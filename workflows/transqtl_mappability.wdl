@@ -76,7 +76,6 @@ task GenerateTransQTLMappability {
       -I genmap_index
 
     log "Computing GenMap mappability"
-    mkdir -p genmap_output
     genmap map \
       -K ~{kmer_length} \
       -E ~{max_mismatches} \
