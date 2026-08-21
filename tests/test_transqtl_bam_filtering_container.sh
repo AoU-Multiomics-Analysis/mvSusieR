@@ -8,3 +8,5 @@ docker build \
 
 docker run --rm transqtl-bam-filtering-test samtools --version
 docker run --rm transqtl-bam-filtering-test rnaseqc --version
+docker run --rm transqtl-bam-filtering-test micromamba --version
+docker run --rm transqtl-bam-filtering-test micromamba list --name base

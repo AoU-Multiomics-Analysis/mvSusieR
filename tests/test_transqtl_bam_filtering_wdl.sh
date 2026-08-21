@@ -18,6 +18,7 @@ for token in \
   excluded_read_names \
   filtered_bam \
   filtered_bai \
+  filter_metrics \
   rnaseqc \
   gene_reads.gct \
   gene_tpm.gct \
@@ -32,5 +33,20 @@ done
 rg -q 'outFilterMultimapNmax|mappability_threshold' workflows/transqtl_bam_filtering.wdl
 rg -q 'low_mappability_bed' workflows/transqtl_bam_filtering.wdl
 rg -q 'legacy' workflows/transqtl_bam_filtering.wdl
+for metric in \
+  input_alignment_records \
+  output_alignment_records \
+  removed_alignment_records \
+  total_reads_before_filtering \
+  total_reads_after_filtering \
+  reads_removed_total \
+  nonunique_filter_alignment_records \
+  low_mappability_filter_alignment_records \
+  both_filters_alignment_records \
+  input_read_templates \
+  output_read_templates \
+  excluded_read_templates; do
+  rg -q "$metric" workflows/transqtl_bam_filtering.wdl
+done
 
 echo "TransQTLBamFiltering WDL validation passed"

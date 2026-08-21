@@ -1,0 +1,7 @@
+name: base
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - samtools
+  - rna-seqc=2.4.2

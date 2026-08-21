@@ -7,15 +7,19 @@ on:
     paths:
       - ".github/workflows/transqtl-bam-filtering-image.yml"
       - "envs/transqtl-bam-filtering.Dockerfile"
+      - "envs/transqtl-bam-filtering.environment.yml"
       - "workflows/transqtl_bam_filtering.wdl"
       - "tests/test_transqtl_bam_filtering_container.sh"
+      - "tests/test_transqtl_bam_filtering_micromamba.sh"
   pull_request:
     branches: [main]
     paths:
       - ".github/workflows/transqtl-bam-filtering-image.yml"
       - "envs/transqtl-bam-filtering.Dockerfile"
+      - "envs/transqtl-bam-filtering.environment.yml"
       - "workflows/transqtl_bam_filtering.wdl"
       - "tests/test_transqtl_bam_filtering_container.sh"
+      - "tests/test_transqtl_bam_filtering_micromamba.sh"
 
 env:
   REGISTRY: ghcr.io
@@ -49,6 +53,9 @@ jobs:
 
       - name: Verify RNA-SeQC2
         run: docker run --rm transqtl-bam-filtering-ci:latest rnaseqc --version
+
+      - name: Verify micromamba environment
+        run: docker run --rm transqtl-bam-filtering-ci:latest micromamba list --name base
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'

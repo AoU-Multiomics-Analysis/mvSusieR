@@ -96,15 +96,17 @@ task FilterTransQTLBam {
           }
           if (nh == "" || nh != 1) print $1
         }
-      ' > nonunique.names
+      ' \
+      | LC_ALL=C sort -u > nonunique.templates.txt
 
     # Exclude a template if any aligned record overlaps the low-mappability
     # mask. samtools -L uses reference-coordinate overlap, so this applies to
     # the actual alignment rather than to the read sequence alone.
     samtools view -@ ~{threads} -L low_mappability.sorted.bed bam_input/input.bam \
-      | cut -f1 > low_mappability.names
+      | cut -f1 \
+      | LC_ALL=C sort -u > low_mappability.templates.txt
 
-    LC_ALL=C sort -u nonunique.names low_mappability.names \
+    LC_ALL=C sort -u nonunique.templates.txt low_mappability.templates.txt \
       > ~{output_prefix}.excluded_read_names.txt
 
     # Remove every SAM record belonging to an excluded template, preserving
@@ -162,12 +164,71 @@ task FilterTransQTLBam {
 
     input_records="$(samtools view -@ ~{threads} -c bam_input/input.bam)"
     output_records="$(samtools view -@ ~{threads} -c ~{output_prefix}.filtered.bam)"
+    removed_records="$((input_records - output_records))"
+    samtools view -@ ~{threads} bam_input/input.bam \
+      | cut -f1 \
+      | LC_ALL=C sort -u > input.templates.txt
+    samtools view -@ ~{threads} ~{output_prefix}.filtered.bam \
+      | cut -f1 \
+      | LC_ALL=C sort -u > output.templates.txt
+
+    input_templates="$(wc -l < input.templates.txt | tr -d ' ')"
+    output_templates="$(wc -l < output.templates.txt | tr -d ' ')"
     excluded_templates="$(wc -l < ~{output_prefix}.excluded_read_names.txt | tr -d ' ')"
+    nonunique_templates="$(wc -l < nonunique.templates.txt | tr -d ' ')"
+    low_mappability_templates="$(wc -l < low_mappability.templates.txt | tr -d ' ')"
+    both_filter_templates="$(comm -12 nonunique.templates.txt low_mappability.templates.txt | wc -l | tr -d ' ')"
+    nonunique_only_templates="$(comm -23 nonunique.templates.txt low_mappability.templates.txt | wc -l | tr -d ' ')"
+    low_mappability_only_templates="$(comm -13 nonunique.templates.txt low_mappability.templates.txt | wc -l | tr -d ' ')"
+
+    # Count alignment records removed because their template was affected by
+    # each filter. A record can be counted in both filters when its template
+    # has both an NH failure and a low-mappability overlap.
+    samtools view -@ ~{threads} bam_input/input.bam \
+      | awk -F '\t' \
+        -v nonunique_file='nonunique.templates.txt' \
+        -v low_mappability_file='low_mappability.templates.txt' '
+        BEGIN {
+          while ((getline name < nonunique_file) > 0) nonunique[name] = 1
+          close(nonunique_file)
+          while ((getline name < low_mappability_file) > 0) low_mappability[name] = 1
+          close(low_mappability_file)
+        }
+        {
+          has_nonunique = ($1 in nonunique)
+          has_low_mappability = ($1 in low_mappability)
+          if (has_nonunique) nonunique_records++
+          if (has_low_mappability) low_mappability_records++
+          if (has_nonunique && has_low_mappability) both_records++
+          if (has_nonunique && !has_low_mappability) nonunique_only_records++
+          if (!has_nonunique && has_low_mappability) low_mappability_only_records++
+        }
+        END {
+          printf "nonunique_filter_alignment_records\t%d\n", nonunique_records + 0
+          printf "low_mappability_filter_alignment_records\t%d\n", low_mappability_records + 0
+          printf "both_filters_alignment_records\t%d\n", both_records + 0
+          printf "nonunique_only_alignment_records\t%d\n", nonunique_only_records + 0
+          printf "low_mappability_only_alignment_records\t%d\n", low_mappability_only_records + 0
+        }
+      ' > record_filter_metrics.tsv
+
     {
       printf 'metric\tvalue\n'
+      printf 'total_reads_before_filtering\t%s\n' "${input_records}"
+      printf 'total_reads_after_filtering\t%s\n' "${output_records}"
+      printf 'reads_removed_total\t%s\n' "${removed_records}"
       printf 'input_alignment_records\t%s\n' "${input_records}"
       printf 'output_alignment_records\t%s\n' "${output_records}"
+      printf 'removed_alignment_records\t%s\n' "${removed_records}"
+      printf 'input_read_templates\t%s\n' "${input_templates}"
+      printf 'output_read_templates\t%s\n' "${output_templates}"
       printf 'excluded_read_templates\t%s\n' "${excluded_templates}"
+      printf 'nonunique_filter_read_templates\t%s\n' "${nonunique_templates}"
+      printf 'low_mappability_filter_read_templates\t%s\n' "${low_mappability_templates}"
+      printf 'both_filters_read_templates\t%s\n' "${both_filter_templates}"
+      printf 'nonunique_only_read_templates\t%s\n' "${nonunique_only_templates}"
+      printf 'low_mappability_only_read_templates\t%s\n' "${low_mappability_only_templates}"
+      cat record_filter_metrics.tsv
       printf 'mappability_threshold\t%s\n' '~{mappability_threshold}'
       printf 'nh_policy\tNH:i:1 required; missing or non-1 excluded\n'
       printf 'low_mappability_policy\tany reference overlap excludes the whole template\n'
