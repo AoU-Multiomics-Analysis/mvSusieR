@@ -23,10 +23,10 @@ for token in \
   mappability_metadata \
   'log()' \
   'Mappability outputs verified'; do
-  rg -Fq "$token" workflows/transqtl_mappability.wdl
+  grep -Fq "$token" workflows/transqtl_mappability.wdl
 done
 
-rg -q 'threshold > 0 && threshold <= 1' workflows/transqtl_mappability.wdl
-rg -q 'preemptible: preemptible_tries' workflows/transqtl_mappability.wdl
+grep -Eq 'threshold > 0 && threshold <= 1' workflows/transqtl_mappability.wdl
+grep -Eq 'preemptible: preemptible_tries' workflows/transqtl_mappability.wdl
 
 echo "TransQTLMappability WDL validation passed"
