@@ -27,13 +27,16 @@ for token in \
   'samtools sort' \
   'samtools index' \
   'samtools view.*-L' \
+  'if samtools index' \
+  'Filtered BAM was already coordinate sorted; skipped resorting' \
+  'Filtered BAM was not indexable as coordinate sorted; sorting and retrying' \
   'log()' \
   'Starting TransQTLBamFiltering' \
   'Preparing low-mappability BED' \
   'Identifying nonunique templates' \
   'Identifying low-mappability templates' \
   'Writing filtered BAM' \
-  'Sorting and indexing filtered BAM' \
+  'Validating filtered BAM order and creating index' \
   'Running RNA-SeQC2' \
   'Computing filtering summaries' \
   'Completed TransQTLBamFiltering'; do

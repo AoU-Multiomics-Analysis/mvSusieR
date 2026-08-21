@@ -135,18 +135,28 @@ task FilterTransQTLBam {
       ' \
       | samtools view -@ ~{threads} -b -o ~{output_prefix}.unsorted.bam -
 
-    log "Sorting and indexing filtered BAM"
-    samtools sort -@ ~{threads} \
-      -o ~{output_prefix}.filtered.bam \
-      ~{output_prefix}.unsorted.bam
-    samtools index -@ ~{threads} \
+    log "Validating filtered BAM order and creating index"
+    mv ~{output_prefix}.unsorted.bam ~{output_prefix}.filtered.bam
+    if samtools index -@ ~{threads} \
       ~{output_prefix}.filtered.bam \
-      ~{output_prefix}.filtered.bam.bai
+      ~{output_prefix}.filtered.bam.bai; then
+      log "Filtered BAM was already coordinate sorted; skipped resorting"
+    else
+      log "Filtered BAM was not indexable as coordinate sorted; sorting and retrying"
+      rm -f ~{output_prefix}.filtered.bam.bai
+      samtools sort -@ ~{threads} \
+        -o ~{output_prefix}.resorted.bam \
+        ~{output_prefix}.filtered.bam
+      mv ~{output_prefix}.resorted.bam ~{output_prefix}.filtered.bam
+      samtools index -@ ~{threads} \
+        ~{output_prefix}.filtered.bam \
+        ~{output_prefix}.filtered.bam.bai
+    fi
     samtools quickcheck ~{output_prefix}.filtered.bam
     samtools flagstat -@ ~{threads} \
       ~{output_prefix}.filtered.bam \
       > ~{output_prefix}.filtered.flagstat.txt
-    log "Filtered BAM sorted, indexed, and validated"
+    log "Filtered BAM coordinate order validated and indexed"
 
     strandedness_value="~{strandedness}"
     case "${strandedness_value}" in
@@ -255,7 +265,6 @@ task FilterTransQTLBam {
 
     log "Completed TransQTLBamFiltering: alignment_records_before=${input_records} alignment_records_after=${output_records} reads_removed=${removed_records} nonunique_templates=${nonunique_templates} low_mappability_templates=${low_mappability_templates}"
 
-    rm -f ~{output_prefix}.unsorted.bam
   >>>
 
   output {
