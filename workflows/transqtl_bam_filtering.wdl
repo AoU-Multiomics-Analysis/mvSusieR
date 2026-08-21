@@ -14,6 +14,7 @@ workflow TransQTLBamFiltering {
     Boolean write_filter_metrics = true
     Int preemptible_tries = 1
     Int threads = 4
+    String memory = "16 GiB"
   }
 
   call FilterTransQTLBam {
@@ -29,7 +30,8 @@ workflow TransQTLBamFiltering {
       legacy = legacy,
       write_filter_metrics = write_filter_metrics,
       preemptible_tries = preemptible_tries,
-      threads = threads
+      threads = threads,
+      memory = memory
   }
 
   output {
@@ -59,6 +61,7 @@ task FilterTransQTLBam {
     Boolean write_filter_metrics
     Int preemptible_tries
     Int threads
+    String memory
   }
 
   command <<<
@@ -292,7 +295,7 @@ task FilterTransQTLBam {
   runtime {
     docker: "ghcr.io/aou-multiomics-analysis/transqtl-bam-filtering:latest"
     cpu: threads
-    memory: "16 GiB"
+    memory: memory
     disks: "local-disk 500 SSD"
     preemptible: preemptible_tries
   }

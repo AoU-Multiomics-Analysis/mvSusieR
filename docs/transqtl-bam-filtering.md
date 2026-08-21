@@ -46,6 +46,8 @@ Other defaults:
   calculations and leave the optional `filter_metrics` output undefined.
 - `preemptible_tries = 1`; increase this to allow retries on preemptible/spot
   instances when supported by the execution backend.
+- `memory = "16 GiB"`; override this for larger or smaller input samples, for
+  example `"12 GiB"` when the task's peak memory allows it.
 
 ## Outputs
 
