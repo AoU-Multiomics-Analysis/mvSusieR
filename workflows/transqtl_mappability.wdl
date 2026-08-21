@@ -76,6 +76,10 @@ task GenerateTransQTLMappability {
       -I genmap_index
 
     log "Computing GenMap mappability"
+    reference_sequence_count="$(grep -c '^>' reference.fasta)"
+    if [ "${reference_sequence_count}" -gt 1 ]; then
+      mkdir -p genmap_output
+    fi
     genmap map \
       -K ~{kmer_length} \
       -E ~{max_mismatches} \
@@ -85,7 +89,11 @@ task GenerateTransQTLMappability {
       -w \
       -bg
 
-    mappability_source="$(find . -type f \( -name '*.bedGraph' -o -name '*.bg' \) -print -quit)"
+    if [ "${reference_sequence_count}" -gt 1 ]; then
+      mappability_source="$(find genmap_output -type f \( -name '*.bedGraph' -o -name '*.bg' \) -print -quit)"
+    else
+      mappability_source="$(find . -type f \( -name '*.bedGraph' -o -name '*.bg' \) -print -quit)"
+    fi
     if [ -z "${mappability_source}" ]; then
       echo "GenMap did not produce a BEDGraph" >&2
       exit 1
