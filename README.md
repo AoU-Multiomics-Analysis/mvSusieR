@@ -11,6 +11,26 @@
 <!-- workflow-badges:end -->
 
 
+## TransQTL BAM filtering and RNA-SeQC2
+
+`workflows/transqtl_bam_filtering.wdl` removes whole read templates when any
+alignment is non-unique (`NH != 1` or missing) or overlaps a supplied
+ENCODE-derived low-mappability BED, then runs RNA-SeQC2 on the retained,
+coordinate-sorted BAM in the same task. The workflow emits the filtered BAM,
+excluded template names, filtering metrics, and RNA-SeQC2 gene read counts,
+gene TPMs, metrics, and coverage tables.
+
+The `low_mappability_bed` input must already be generated for the same genome
+build and read-mappability definition as the BAM. The WDL records the threshold
+as provenance but does not recreate the ENCODE 36-mer/two-mismatch track from
+an arbitrary BigWig.
+
+Required inputs are `input_bam`, `input_bai`, `low_mappability_bed`,
+`genes_gtf`, and `sample_id`. `strandedness` defaults to `rf`; set `legacy` to
+`true` only when RNA-SeQC2 compatibility with RNA-SeQC 1.1.9 counting rules is
+required. The image is built and published by
+`.github/workflows/transqtl-bam-filtering-image.yml`.
+
 ## Trans-window multivariate fine-mapping
 
 `workflows/trans_window_mvsusie.wdl` runs the canonical-prior `mvsusieR` model independently across trans windows. The v1 workflow learns no mashr covariance and accepts raw window-level matrices plus manifests. Genome-wide association summaries can be added later for mashr covariance learning.

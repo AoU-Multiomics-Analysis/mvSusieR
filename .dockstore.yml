@@ -9,3 +9,6 @@ workflows:
   - name: ld-pruning
     subclass: WDL
     primaryDescriptorPath: /workflows/ld_pruning.wdl
+  - name: transqtl-bam-filtering
+    subclass: WDL
+    primaryDescriptorPath: /workflows/transqtl_bam_filtering.wdl
