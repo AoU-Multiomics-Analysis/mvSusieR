@@ -11,6 +11,7 @@ grep -Eq '^  - samtools(=|$)' "$environment"
 grep -Fx '  - rna-seqc=2.4.2' "$environment"
 
 grep -Eq '^FROM mambaorg/micromamba:' "$dockerfile"
+grep -F 'ARG MAMBA_DOCKERFILE_ACTIVATE=1' "$dockerfile"
 grep -F 'micromamba install' "$dockerfile"
 grep -F 'micromamba config set channel_priority strict' "$dockerfile"
 ! grep -F 'apt-get' "$dockerfile"
