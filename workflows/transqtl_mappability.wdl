@@ -85,7 +85,7 @@ task GenerateTransQTLMappability {
       -w \
       -bg
 
-    mappability_source="$(find genmap_output -type f -name '*.bedGraph' -print -quit)"
+    mappability_source="$(find . -type f -name '*.bedGraph' -print -quit)"
     if [ -z "${mappability_source}" ]; then
       echo "GenMap did not produce a BEDGraph" >&2
       exit 1

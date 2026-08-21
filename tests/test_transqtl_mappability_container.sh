@@ -29,8 +29,8 @@ docker run --rm \
       printf '\''\n'\''
     } > "$tmpdir/reference.fa"
     genmap index -F "$tmpdir/reference.fa" -I "$tmpdir/index"
-    genmap map -K 20 -E 2 -I "$tmpdir/index" -O "$tmpdir/output" -t -w -bg
-    bedgraph="$(find "$tmpdir/output" -type f -name "*.bedGraph" -print -quit)"
+    genmap map -K 20 -E 2 -I "$tmpdir/index" -O "$tmpdir/mappability" -t -w -bg
+    bedgraph="$(find "$tmpdir" -type f -name "*.bedGraph" -print -quit)"
     test -n "$bedgraph"
     test -s "$bedgraph"
     awk '\''BEGIN { OFS = "\t" } $4 < 1 { print $1, $2, $3 }'\'' "$bedgraph" \
