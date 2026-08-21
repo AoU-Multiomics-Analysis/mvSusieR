@@ -12,6 +12,28 @@
 [![WDL validation](https://github.com/AoU-Multiomics-Analysis/mvSusieR/actions/workflows/wdl-validation.yml/badge.svg)](https://github.com/AoU-Multiomics-Analysis/mvSusieR/actions/workflows/wdl-validation.yml)
 <!-- workflow-badges:end -->
 
+## TransQTL read filtering and mappability
+
+The TransQTL workflows separate mappability-track generation from BAM
+filtering:
+
+1. [`TransQTLMappability`](workflows/transqtl_mappability.wdl) computes a
+   read-length-specific GenMap track from a caller-supplied reference FASTA and
+   emits a low-mappability BED.
+2. [`TransQTLBamFiltering`](workflows/transqtl_bam_filtering.wdl) removes whole
+   read templates with non-unique or missing `NH:i:1` tags, or with any
+   alignment overlapping that BED, and then runs RNA-SeQC2 on the retained BAM.
+
+The reference FASTA, BAM, BED, and GTF must use compatible genome builds and
+contig names. The mappability workflow does not download a reference or
+recreate an ENCODE track automatically. Its defaults are `k=146`, two allowed
+mismatches, and a low-mappability threshold of `<1.0`; change `k` when the
+track should represent a different read length.
+
+See the [mappability guide](docs/transqtl-mappability.md) for generation,
+inputs, outputs, and reproducibility details. See the [BAM filtering guide](docs/transqtl-bam-filtering.md)
+for filtering semantics, metrics, RNA-SeQC2 outputs, and an example launch.
+
 
 ## TransQTL BAM filtering and RNA-SeQC2
 
