@@ -58,11 +58,19 @@ task FilterTransQTLBam {
   command <<<
     set -euo pipefail
 
+    log() {
+      printf '[%s] [TransQTLBamFiltering] %s\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2
+    }
+
+    log "Starting TransQTLBamFiltering for sample ~{sample_id} with ~{threads} threads"
+
     if [ ~{threads} -lt 1 ]; then
       echo "threads must be at least 1" >&2
       exit 1
     fi
 
+    log "Preparing low-mappability BED and linking input BAM"
     mkdir -p bam_input
     ln -s ~{input_bam} bam_input/input.bam
     ln -s ~{input_bai} bam_input/input.bam.bai
@@ -81,9 +89,11 @@ task FilterTransQTLBam {
     ' ~{low_mappability_bed} > low_mappability.normalized.bed
     LC_ALL=C sort -k1,1V -k2,2n -k3,3n \
       low_mappability.normalized.bed > low_mappability.sorted.bed
+    log "Low-mappability BED prepared"
 
     # Exclude a template if any of its alignments is multi-mapped or lacks
     # the NH tag. NH:i:1 is the unique-alignment criterion emitted by STAR.
+    log "Identifying nonunique templates from NH tags"
     samtools view -@ ~{threads} bam_input/input.bam \
       | awk -F '\t' '
         {
@@ -102,15 +112,18 @@ task FilterTransQTLBam {
     # Exclude a template if any aligned record overlaps the low-mappability
     # mask. samtools -L uses reference-coordinate overlap, so this applies to
     # the actual alignment rather than to the read sequence alone.
+    log "Identifying low-mappability templates from reference overlap"
     samtools view -@ ~{threads} -L low_mappability.sorted.bed bam_input/input.bam \
       | cut -f1 \
       | LC_ALL=C sort -u > low_mappability.templates.txt
 
     LC_ALL=C sort -u nonunique.templates.txt low_mappability.templates.txt \
       > ~{output_prefix}.excluded_read_names.txt
+    log "Template exclusion list created"
 
     # Remove every SAM record belonging to an excluded template, preserving
     # the header and therefore the read-group metadata.
+    log "Writing filtered BAM"
     samtools view -@ ~{threads} -h bam_input/input.bam \
       | awk -F '\t' -v bad_names='~{output_prefix}.excluded_read_names.txt' '
         BEGIN {
@@ -122,6 +135,7 @@ task FilterTransQTLBam {
       ' \
       | samtools view -@ ~{threads} -b -o ~{output_prefix}.unsorted.bam -
 
+    log "Sorting and indexing filtered BAM"
     samtools sort -@ ~{threads} \
       -o ~{output_prefix}.filtered.bam \
       ~{output_prefix}.unsorted.bam
@@ -132,6 +146,7 @@ task FilterTransQTLBam {
     samtools flagstat -@ ~{threads} \
       ~{output_prefix}.filtered.bam \
       > ~{output_prefix}.filtered.flagstat.txt
+    log "Filtered BAM sorted, indexed, and validated"
 
     strandedness_value="~{strandedness}"
     case "${strandedness_value}" in
@@ -148,6 +163,7 @@ task FilterTransQTLBam {
     fi
 
     mkdir -p rnaseqc_output
+    log "Running RNA-SeQC2"
     rnaseqc \
       ~{genes_gtf} \
       ~{output_prefix}.filtered.bam \
@@ -161,7 +177,9 @@ task FilterTransQTLBam {
     test -s rnaseqc_output/~{sample_id}.gene_tpm.gct
     test -s rnaseqc_output/~{sample_id}.metrics.tsv
     test -s rnaseqc_output/~{sample_id}.coverage.tsv
+    log "RNA-SeQC2 outputs verified"
 
+    log "Computing filtering summaries"
     input_records="$(samtools view -@ ~{threads} -c bam_input/input.bam)"
     output_records="$(samtools view -@ ~{threads} -c ~{output_prefix}.filtered.bam)"
     removed_records="$((input_records - output_records))"
@@ -234,6 +252,8 @@ task FilterTransQTLBam {
       printf 'low_mappability_policy\tany reference overlap excludes the whole template\n'
       printf 'low_mappability_bed\t%s\n' '~{low_mappability_bed}'
     } > ~{output_prefix}.filter_metrics.tsv
+
+    log "Completed TransQTLBamFiltering: alignment_records_before=${input_records} alignment_records_after=${output_records} reads_removed=${removed_records} nonunique_templates=${nonunique_templates} low_mappability_templates=${low_mappability_templates}"
 
     rm -f ~{output_prefix}.unsorted.bam
   >>>

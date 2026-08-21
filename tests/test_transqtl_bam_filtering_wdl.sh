@@ -26,7 +26,17 @@ for token in \
   'samtools view' \
   'samtools sort' \
   'samtools index' \
-  'samtools view.*-L'; do
+  'samtools view.*-L' \
+  'log()' \
+  'Starting TransQTLBamFiltering' \
+  'Preparing low-mappability BED' \
+  'Identifying nonunique templates' \
+  'Identifying low-mappability templates' \
+  'Writing filtered BAM' \
+  'Sorting and indexing filtered BAM' \
+  'Running RNA-SeQC2' \
+  'Computing filtering summaries' \
+  'Completed TransQTLBamFiltering'; do
   rg -q "$token" workflows/transqtl_bam_filtering.wdl
 done
 
