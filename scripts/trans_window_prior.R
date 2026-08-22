@@ -96,6 +96,53 @@ compute_marginal_bhat_shat_matrix <- function(X, Y, block_size = 1000L) {
       byrow = TRUE
     ) - 2 * block_Bhat * residual_crossproduct +
       block_Bhat^2 * standardized_x_ss
+
+    y_ss_matrix <- matrix(
+      y_ss,
+      nrow = length(indices),
+      ncol = n_outcomes,
+      byrow = TRUE
+    )
+    unstable <- !is.finite(residual_ss) |
+      residual_ss <= sqrt(.Machine$double.eps) * y_ss_matrix
+    if (any(unstable)) {
+      pipeline_log(sprintf(
+        paste(
+          "Recomputing %d near-perfect association residual sums of squares",
+          "directly."
+        ),
+        sum(unstable)
+      ))
+      fallback_chunk_size <- 100L
+      for (outcome_index in which(colSums(unstable) > 0L)) {
+        local_indices <- which(unstable[, outcome_index])
+        fallback_starts <- seq.int(
+          1L,
+          length(local_indices),
+          by = fallback_chunk_size
+        )
+        for (fallback_first in fallback_starts) {
+          fallback_last <- min(
+            fallback_first + fallback_chunk_size - 1L,
+            length(local_indices)
+          )
+          selected <- local_indices[fallback_first:fallback_last]
+          fitted_values <- sweep(
+            X_standardized_centered[, selected, drop = FALSE],
+            2L,
+            block_Bhat[selected, outcome_index],
+            "*"
+          )
+          residuals <- -sweep(
+            fitted_values,
+            1L,
+            Y_centered[, outcome_index],
+            "-"
+          )
+          residual_ss[selected, outcome_index] <- colSums(residuals^2)
+        }
+      }
+    }
     residual_variance <- pmax(residual_ss / predictor_weight, 1e-64)
     Shat[indices, ] <- sqrt(residual_variance) / sqrt(predictor_weight)
   }

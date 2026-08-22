@@ -35,6 +35,25 @@ stopifnot(isTRUE(all.equal(
   tolerance = 1e-8
 )))
 
+set.seed(20260820)
+X_near_perfect <- matrix(rnorm(100L * 3L), nrow = 100L)
+X_near_perfect_scaled <- scale(X_near_perfect)
+Y_near_perfect <- cbind(
+  2 * X_near_perfect_scaled[, 1L] + rnorm(100L, sd = 1e-10),
+  -3 * X_near_perfect_scaled[, 2L] + rnorm(100L, sd = 1e-8)
+)
+near_perfect_reference <- susieR::compute_marginal_bhat_shat(
+  X = X_near_perfect_scaled,
+  Y = Y_near_perfect
+)
+near_perfect_marginal <- suppressMessages(
+  compute_marginal_bhat_shat_matrix(X_near_perfect, Y_near_perfect)
+)
+relative_shat_error <- abs(
+  near_perfect_marginal$Shat - near_perfect_reference$Shat
+) / near_perfect_reference$Shat
+stopifnot(max(relative_shat_error) < 1e-6)
+
 set.seed(20260822)
 Bhat <- matrix(rnorm(72L * 3L), nrow = 72L, ncol = 3L)
 Shat <- matrix(runif(72L * 3L, min = 0.05, max = 0.2), nrow = 72L, ncol = 3L)
