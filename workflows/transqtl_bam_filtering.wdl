@@ -127,14 +127,14 @@ task FilterTransQTLBam {
       | LC_ALL=C sort -u > low_mappability.templates.txt
 
     LC_ALL=C sort -u nonunique.templates.txt low_mappability.templates.txt \
-      > ~{output_prefix}.excluded_read_names.txt
+      > ~{output_prefix}.TransQTLFiltered.excluded_read_names.txt
     log "Template exclusion list created"
 
     # Remove every SAM record belonging to an excluded template, preserving
     # the header and therefore the read-group metadata.
     log "Writing filtered BAM"
     samtools view -@ ~{threads} -h bam_input/input.bam \
-      | awk -F '\t' -v bad_names='~{output_prefix}.excluded_read_names.txt' '
+      | awk -F '\t' -v bad_names='~{output_prefix}.TransQTLFiltered.excluded_read_names.txt' '
         BEGIN {
           while ((getline name < bad_names) > 0) excluded[name] = 1
           close(bad_names)
@@ -145,26 +145,26 @@ task FilterTransQTLBam {
       | samtools view -@ ~{threads} -b -o ~{output_prefix}.unsorted.bam -
 
     log "Validating filtered BAM order and creating index"
-    mv ~{output_prefix}.unsorted.bam ~{output_prefix}.filtered.bam
+    mv ~{output_prefix}.unsorted.bam ~{output_prefix}.TransQTLFiltered.bam
     if samtools index -@ ~{threads} \
-      ~{output_prefix}.filtered.bam \
-      ~{output_prefix}.filtered.bam.bai; then
+      ~{output_prefix}.TransQTLFiltered.bam \
+      ~{output_prefix}.TransQTLFiltered.bam.bai; then
       log "Filtered BAM was already coordinate sorted; skipped resorting"
     else
       log "Filtered BAM was not indexable as coordinate sorted; sorting and retrying"
-      rm -f ~{output_prefix}.filtered.bam.bai
+      rm -f ~{output_prefix}.TransQTLFiltered.bam.bai
       samtools sort -@ ~{threads} \
         -o ~{output_prefix}.resorted.bam \
-        ~{output_prefix}.filtered.bam
-      mv ~{output_prefix}.resorted.bam ~{output_prefix}.filtered.bam
+        ~{output_prefix}.TransQTLFiltered.bam
+      mv ~{output_prefix}.resorted.bam ~{output_prefix}.TransQTLFiltered.bam
       samtools index -@ ~{threads} \
-        ~{output_prefix}.filtered.bam \
-        ~{output_prefix}.filtered.bam.bai
+        ~{output_prefix}.TransQTLFiltered.bam \
+        ~{output_prefix}.TransQTLFiltered.bam.bai
     fi
-    samtools quickcheck ~{output_prefix}.filtered.bam
+    samtools quickcheck ~{output_prefix}.TransQTLFiltered.bam
     samtools flagstat -@ ~{threads} \
-      ~{output_prefix}.filtered.bam \
-      > ~{output_prefix}.filtered.flagstat.txt
+      ~{output_prefix}.TransQTLFiltered.bam \
+      > ~{output_prefix}.TransQTLFiltered.flagstat.txt
     log "Filtered BAM coordinate order validated and indexed"
 
     strandedness_value="~{strandedness}"
@@ -185,34 +185,42 @@ task FilterTransQTLBam {
     log "Running RNA-SeQC2"
     rnaseqc \
       ~{genes_gtf} \
-      ~{output_prefix}.filtered.bam \
+      ~{output_prefix}.TransQTLFiltered.bam \
       rnaseqc_output \
       --sample ~{sample_id} \
       --stranded "${strandedness_value}" \
       --coverage \
       ${legacy_flag}
 
-    test -s rnaseqc_output/~{sample_id}.gene_reads.gct
-    test -s rnaseqc_output/~{sample_id}.gene_tpm.gct
-    test -s rnaseqc_output/~{sample_id}.metrics.tsv
-    test -s rnaseqc_output/~{sample_id}.coverage.tsv
+    mv rnaseqc_output/~{sample_id}.gene_reads.gct \
+      ~{output_prefix}.TransQTLFiltered.gene_reads.gct
+    mv rnaseqc_output/~{sample_id}.gene_tpm.gct \
+      ~{output_prefix}.TransQTLFiltered.gene_tpm.gct
+    mv rnaseqc_output/~{sample_id}.metrics.tsv \
+      ~{output_prefix}.TransQTLFiltered.rnaseqc_metrics.tsv
+    mv rnaseqc_output/~{sample_id}.coverage.tsv \
+      ~{output_prefix}.TransQTLFiltered.rnaseqc_coverage.tsv
+    test -s ~{output_prefix}.TransQTLFiltered.gene_reads.gct
+    test -s ~{output_prefix}.TransQTLFiltered.gene_tpm.gct
+    test -s ~{output_prefix}.TransQTLFiltered.rnaseqc_metrics.tsv
+    test -s ~{output_prefix}.TransQTLFiltered.rnaseqc_coverage.tsv
     log "RNA-SeQC2 outputs verified"
 
     if [ "~{write_filter_metrics}" = "true" ]; then
       log "Computing filtering summaries"
       input_records="$(samtools view -@ ~{threads} -c bam_input/input.bam)"
-      output_records="$(samtools view -@ ~{threads} -c ~{output_prefix}.filtered.bam)"
+      output_records="$(samtools view -@ ~{threads} -c ~{output_prefix}.TransQTLFiltered.bam)"
       removed_records="$((input_records - output_records))"
       samtools view -@ ~{threads} bam_input/input.bam \
         | cut -f1 \
         | LC_ALL=C sort -u > input.templates.txt
-      samtools view -@ ~{threads} ~{output_prefix}.filtered.bam \
+      samtools view -@ ~{threads} ~{output_prefix}.TransQTLFiltered.bam \
         | cut -f1 \
         | LC_ALL=C sort -u > output.templates.txt
 
       input_templates="$(wc -l < input.templates.txt | tr -d ' ')"
       output_templates="$(wc -l < output.templates.txt | tr -d ' ')"
-      excluded_templates="$(wc -l < ~{output_prefix}.excluded_read_names.txt | tr -d ' ')"
+      excluded_templates="$(wc -l < ~{output_prefix}.TransQTLFiltered.excluded_read_names.txt | tr -d ' ')"
       nonunique_templates="$(wc -l < nonunique.templates.txt | tr -d ' ')"
       low_mappability_templates="$(wc -l < low_mappability.templates.txt | tr -d ' ')"
       both_filter_templates="$(comm -12 nonunique.templates.txt low_mappability.templates.txt | wc -l | tr -d ' ')"
@@ -271,7 +279,7 @@ task FilterTransQTLBam {
         printf 'nh_policy\tNH:i:1 required; missing or non-1 excluded\n'
         printf 'low_mappability_policy\tany reference overlap excludes the whole template\n'
         printf 'low_mappability_bed\t%s\n' '~{low_mappability_bed}'
-      } > ~{output_prefix}.filter_metrics.tsv
+      } > ~{output_prefix}.TransQTLFiltered.filter_metrics.tsv
     else
       log "Skipping filtering summaries because write_filter_metrics=false"
     fi
@@ -281,15 +289,15 @@ task FilterTransQTLBam {
   >>>
 
   output {
-    File filtered_bam = output_prefix + ".filtered.bam"
-    File filtered_bai = output_prefix + ".filtered.bam.bai"
-    File excluded_read_names = output_prefix + ".excluded_read_names.txt"
-    File? filter_metrics = output_prefix + ".filter_metrics.tsv"
-    File filtered_flagstat = output_prefix + ".filtered.flagstat.txt"
-    File gene_reads = "rnaseqc_output/" + sample_id + ".gene_reads.gct"
-    File gene_tpm = "rnaseqc_output/" + sample_id + ".gene_tpm.gct"
-    File rnaseqc_metrics = "rnaseqc_output/" + sample_id + ".metrics.tsv"
-    File rnaseqc_coverage = "rnaseqc_output/" + sample_id + ".coverage.tsv"
+    File filtered_bam = output_prefix + ".TransQTLFiltered.bam"
+    File filtered_bai = output_prefix + ".TransQTLFiltered.bam.bai"
+    File excluded_read_names = output_prefix + ".TransQTLFiltered.excluded_read_names.txt"
+    File? filter_metrics = output_prefix + ".TransQTLFiltered.filter_metrics.tsv"
+    File filtered_flagstat = output_prefix + ".TransQTLFiltered.flagstat.txt"
+    File gene_reads = output_prefix + ".TransQTLFiltered.gene_reads.gct"
+    File gene_tpm = output_prefix + ".TransQTLFiltered.gene_tpm.gct"
+    File rnaseqc_metrics = output_prefix + ".TransQTLFiltered.rnaseqc_metrics.tsv"
+    File rnaseqc_coverage = output_prefix + ".TransQTLFiltered.rnaseqc_coverage.tsv"
   }
 
   runtime {

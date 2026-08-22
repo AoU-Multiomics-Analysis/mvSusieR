@@ -58,6 +58,19 @@ rg -q 'File\? filter_metrics' workflows/transqtl_bam_filtering.wdl
 rg -q 'if \[ "~\{write_filter_metrics\}" = "true" \]' workflows/transqtl_bam_filtering.wdl
 rg -q 'filter_metrics = FilterTransQTLBam.filter_metrics' workflows/transqtl_bam_filtering.wdl
 
+for output_name in \
+  'TransQTLFiltered.bam' \
+  'TransQTLFiltered.bam.bai' \
+  'TransQTLFiltered.excluded_read_names.txt' \
+  'TransQTLFiltered.filter_metrics.tsv' \
+  'TransQTLFiltered.flagstat.txt' \
+  'TransQTLFiltered.gene_reads.gct' \
+  'TransQTLFiltered.gene_tpm.gct' \
+  'TransQTLFiltered.rnaseqc_metrics.tsv' \
+  'TransQTLFiltered.rnaseqc_coverage.tsv'; do
+  rg -q "$output_name" workflows/transqtl_bam_filtering.wdl
+done
+
 rg -q 'outFilterMultimapNmax|mappability_threshold' workflows/transqtl_bam_filtering.wdl
 rg -q 'low_mappability_bed' workflows/transqtl_bam_filtering.wdl
 rg -q 'legacy' workflows/transqtl_bam_filtering.wdl

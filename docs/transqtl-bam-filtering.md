@@ -67,6 +67,10 @@ report totals before/after filtering. Filter-specific counts can overlap:
 templates or records counted in both the non-unique and low-mappability
 categories are not counted twice in the total removed count.
 
+All output file names begin with `output_prefix + ".TransQTLFiltered"`.
+For example, the filtered BAM is
+`{output_prefix}.TransQTLFiltered.bam`.
+
 ## Example launch
 
 ```bash
