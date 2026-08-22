@@ -27,7 +27,7 @@ make_mashr_data <- function(Bhat, Shat) {
   mashr::mash_set_data(Bhat = Bhat, Shat = Shat, alpha = 0)
 }
 
-compute_marginal_bhat_shat_matrix <- function(X, Y) {
+compute_marginal_bhat_shat_matrix <- function(X, Y, block_size = 1000L) {
   if (!is.matrix(X) || !is.numeric(X) || !is.matrix(Y) || !is.numeric(Y)) {
     stop("X and Y must be numeric matrices.", call. = FALSE)
   }
@@ -37,38 +37,68 @@ compute_marginal_bhat_shat_matrix <- function(X, Y) {
   if (any(!is.finite(X)) || any(!is.finite(Y))) {
     stop("X and Y must contain only finite values.", call. = FALSE)
   }
+  if (
+    length(block_size) != 1L || is.na(block_size) ||
+    block_size < 1L || block_size != as.integer(block_size)
+  ) {
+    stop("block_size must be a positive integer.", call. = FALSE)
+  }
 
   start_time <- proc.time()[["elapsed"]]
   n <- nrow(X)
+  n_variants <- ncol(X)
+  n_outcomes <- ncol(Y)
   pipeline_log(sprintf(
     "Starting marginal associations: N=%d, J=%d, R=%d.",
-    n, ncol(X), ncol(Y)
+    n, n_variants, n_outcomes
   ))
-  pipeline_log("Computing centered sums of squares.")
-  x_mean <- colMeans(X)
-  y_mean <- colMeans(Y)
-  x_ss <- colSums(X^2) - n * x_mean^2
-  y_ss <- colSums(Y^2) - n * y_mean^2
-  if (any(!is.finite(x_ss)) || any(x_ss <= 0)) {
-    stop("X contains a non-finite or zero-variance column.", call. = FALSE)
-  }
-
-  pipeline_log("Computing the all-SNP cross-product.")
-  xy_centered <- crossprod(X, Y) - n * outer(x_mean, y_mean)
-  x_scale <- sqrt(x_ss / (n - 1))
-  xy_standardized <- sweep(xy_centered, 1L, x_scale, "/")
+  pipeline_log("Centering outcomes and computing their sums of squares.")
+  Y_centered <- sweep(Y, 2L, colMeans(Y), "-")
+  y_ss <- colSums(Y_centered^2)
   predictor_weight <- n - 1
-  Bhat <- xy_standardized / predictor_weight
+  Bhat <- matrix(NA_real_, nrow = n_variants, ncol = n_outcomes)
+  Shat <- matrix(NA_real_, nrow = n_variants, ncol = n_outcomes)
+  if (!is.null(colnames(X))) rownames(Bhat) <- rownames(Shat) <- colnames(X)
+  if (!is.null(colnames(Y))) colnames(Bhat) <- colnames(Shat) <- colnames(Y)
+  block_starts <- seq.int(1L, n_variants, by = as.integer(block_size))
 
-  explained_ss <- xy_standardized^2 / predictor_weight
-  residual_ss <- matrix(
-    y_ss,
-    nrow = nrow(explained_ss),
-    ncol = ncol(explained_ss),
-    byrow = TRUE
-  ) - explained_ss
-  residual_variance <- pmax(residual_ss / predictor_weight, 1e-64)
-  Shat <- sqrt(residual_variance) / sqrt(predictor_weight)
+  for (block_index in seq_along(block_starts)) {
+    first <- block_starts[[block_index]]
+    last <- min(first + as.integer(block_size) - 1L, n_variants)
+    indices <- first:last
+    pipeline_log(sprintf(
+      "Computing the all-SNP cross-product block %d of %d (%d-%d).",
+      block_index, length(block_starts), first, last
+    ))
+    X_block <- X[, indices, drop = FALSE]
+    X_block <- sweep(X_block, 2L, colMeans(X_block), "-")
+    x_ss <- colSums(X_block^2)
+    if (any(!is.finite(x_ss)) || any(x_ss <= 0)) {
+      stop("X contains a non-finite or zero-variance column.", call. = FALSE)
+    }
+    x_scale <- sqrt(x_ss / predictor_weight)
+    X_standardized <- sweep(X_block, 2L, x_scale, "/")
+    block_Bhat <- crossprod(X_standardized, Y) / predictor_weight
+    Bhat[indices, ] <- block_Bhat
+
+    X_standardized_centered <- sweep(
+      X_standardized,
+      2L,
+      colMeans(X_standardized),
+      "-"
+    )
+    residual_crossproduct <- crossprod(X_standardized_centered, Y_centered)
+    standardized_x_ss <- colSums(X_standardized_centered^2)
+    residual_ss <- matrix(
+      y_ss,
+      nrow = length(indices),
+      ncol = n_outcomes,
+      byrow = TRUE
+    ) - 2 * block_Bhat * residual_crossproduct +
+      block_Bhat^2 * standardized_x_ss
+    residual_variance <- pmax(residual_ss / predictor_weight, 1e-64)
+    Shat[indices, ] <- sqrt(residual_variance) / sqrt(predictor_weight)
+  }
   validate_marginal_summary_statistics(Bhat, Shat)
 
   pipeline_log(sprintf(

@@ -122,6 +122,32 @@ prepared_conflicting_names <- prepare_window_data(
 )
 stopifnot(ncol(prepared_conflicting_names$X) == ncol(dosage$X))
 stopifnot(all(is.finite(prepared_conflicting_names$X)))
+genotype_conflicting_names <- make_genotype_covariates(
+  conflicting_modality_covariates
+)
+stopifnot(all(c(
+  "expression::PC1",
+  "splicing::PC1",
+  "isoform_usage::PC1"
+) %in% colnames(genotype_conflicting_names)))
+stopifnot(identical(
+  unname(genotype_conflicting_names[, "expression::PC1"]),
+  as.numeric(expression_pc[, "PC1"])
+))
+stopifnot(identical(
+  unname(genotype_conflicting_names[, "splicing::PC1"]),
+  as.numeric(splicing_pc[, "PC1"])
+))
+conflicting_genotype_model <- cbind(
+  genotype_conflicting_names[prepared_conflicting_names$samples, , drop = FALSE],
+  intercept = 1
+)
+stopifnot(
+  max(abs(crossprod(
+    conflicting_genotype_model,
+    prepared_conflicting_names$X
+  ))) < 1e-6
+)
 
 bad_covariates <- covariates
 rownames(bad_covariates) <- paste0("missing_", seq_len(nrow(bad_covariates)))

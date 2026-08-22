@@ -16,6 +16,25 @@ stopifnot(isTRUE(all.equal(marginal$Shat, reference$Shat, tolerance = 1e-10)))
 stopifnot(any(grepl("cross-product", marginal_messages, fixed = TRUE)))
 stopifnot(any(grepl("Marginal associations complete", marginal_messages, fixed = TRUE)))
 
+X_large_offset <- X + 1e12
+large_offset_reference <- susieR::compute_marginal_bhat_shat(
+  X = scale(X_large_offset, center = TRUE, scale = TRUE),
+  Y = Y
+)
+large_offset_marginal <- suppressMessages(
+  compute_marginal_bhat_shat_matrix(X_large_offset, Y)
+)
+stopifnot(isTRUE(all.equal(
+  large_offset_marginal$Bhat,
+  large_offset_reference$Bhat,
+  tolerance = 1e-8
+)))
+stopifnot(isTRUE(all.equal(
+  large_offset_marginal$Shat,
+  large_offset_reference$Shat,
+  tolerance = 1e-8
+)))
+
 set.seed(20260822)
 Bhat <- matrix(rnorm(72L * 3L), nrow = 72L, ncol = 3L)
 Shat <- matrix(runif(72L * 3L, min = 0.05, max = 0.2), nrow = 72L, ncol = 3L)

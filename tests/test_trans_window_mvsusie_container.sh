@@ -19,16 +19,20 @@ rg -q 'susieR.*0[.]15[.]54' "$workflow"
 
 for script in \
   trans_window_io.R \
+  trans_window_logging.R \
   trans_window_preprocess.R \
   trans_window_model.R \
   trans_window_prior.R \
   trans_window_cli.R \
+  fit_window.R \
   run_window_mvsusie.R \
   summarize_window.R \
   merge_window_outputs.R; do
   rg -q "scripts/${script}" "$dockerfile"
   rg -q "scripts/${script}" "$workflow"
 done
+
+rg -q 'compute_marginal_bhat_shat_matrix' "$workflow"
 
 if rg -q 'prepare_window[.]R' "$dockerfile" "$workflow"; then
   echo "The mvSuSiE model image must not include prepare_window.R." >&2
