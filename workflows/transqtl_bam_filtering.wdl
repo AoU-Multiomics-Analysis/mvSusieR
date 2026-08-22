@@ -40,6 +40,7 @@ workflow TransQTLBamFiltering {
     File excluded_read_names = FilterTransQTLBam.excluded_read_names
     File? filter_metrics = FilterTransQTLBam.filter_metrics
     File filtered_flagstat = FilterTransQTLBam.filtered_flagstat
+    File exon_reads = FilterTransQTLBam.exon_reads
     File gene_reads = FilterTransQTLBam.gene_reads
     File gene_tpm = FilterTransQTLBam.gene_tpm
     File rnaseqc_metrics = FilterTransQTLBam.rnaseqc_metrics
@@ -192,6 +193,8 @@ task FilterTransQTLBam {
       --coverage \
       ${legacy_flag}
 
+    mv rnaseqc_output/~{sample_id}.exon_reads.gct \
+      ~{output_prefix}.TransQTLFiltered.exon_reads.gct
     mv rnaseqc_output/~{sample_id}.gene_reads.gct \
       ~{output_prefix}.TransQTLFiltered.gene_reads.gct
     mv rnaseqc_output/~{sample_id}.gene_tpm.gct \
@@ -200,6 +203,7 @@ task FilterTransQTLBam {
       ~{output_prefix}.TransQTLFiltered.rnaseqc_metrics.tsv
     mv rnaseqc_output/~{sample_id}.coverage.tsv \
       ~{output_prefix}.TransQTLFiltered.rnaseqc_coverage.tsv
+    test -s ~{output_prefix}.TransQTLFiltered.exon_reads.gct
     test -s ~{output_prefix}.TransQTLFiltered.gene_reads.gct
     test -s ~{output_prefix}.TransQTLFiltered.gene_tpm.gct
     test -s ~{output_prefix}.TransQTLFiltered.rnaseqc_metrics.tsv
@@ -294,6 +298,7 @@ task FilterTransQTLBam {
     File excluded_read_names = output_prefix + ".TransQTLFiltered.excluded_read_names.txt"
     File? filter_metrics = output_prefix + ".TransQTLFiltered.filter_metrics.tsv"
     File filtered_flagstat = output_prefix + ".TransQTLFiltered.flagstat.txt"
+    File exon_reads = output_prefix + ".TransQTLFiltered.exon_reads.gct"
     File gene_reads = output_prefix + ".TransQTLFiltered.gene_reads.gct"
     File gene_tpm = output_prefix + ".TransQTLFiltered.gene_tpm.gct"
     File rnaseqc_metrics = output_prefix + ".TransQTLFiltered.rnaseqc_metrics.tsv"

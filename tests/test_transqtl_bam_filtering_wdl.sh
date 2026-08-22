@@ -64,12 +64,16 @@ for output_name in \
   'TransQTLFiltered.excluded_read_names.txt' \
   'TransQTLFiltered.filter_metrics.tsv' \
   'TransQTLFiltered.flagstat.txt' \
+  'TransQTLFiltered.exon_reads.gct' \
   'TransQTLFiltered.gene_reads.gct' \
   'TransQTLFiltered.gene_tpm.gct' \
   'TransQTLFiltered.rnaseqc_metrics.tsv' \
   'TransQTLFiltered.rnaseqc_coverage.tsv'; do
   rg -q "$output_name" workflows/transqtl_bam_filtering.wdl
 done
+
+rg -q 'File exon_reads = FilterTransQTLBam.exon_reads' workflows/transqtl_bam_filtering.wdl
+rg -Fq 'File exon_reads = output_prefix + ".TransQTLFiltered.exon_reads.gct"' workflows/transqtl_bam_filtering.wdl
 
 rg -q 'outFilterMultimapNmax|mappability_threshold' workflows/transqtl_bam_filtering.wdl
 rg -q 'low_mappability_bed' workflows/transqtl_bam_filtering.wdl

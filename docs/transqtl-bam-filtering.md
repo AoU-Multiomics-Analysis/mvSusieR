@@ -56,8 +56,8 @@ The workflow emits:
 - coordinate-validated filtered BAM and BAI;
 - excluded template names;
 - filtering metrics and filtered BAM `flagstat` output; and
-- RNA-SeQC2 gene-level read counts (`gene_reads.gct`), TPMs (`gene_tpm.gct`),
-  metrics, and coverage tables.
+- RNA-SeQC2 exon-level read counts (`exon_reads.gct`), gene-level read counts
+  (`gene_reads.gct`), TPMs (`gene_tpm.gct`), metrics, and coverage tables.
 
 The filtering metrics file is emitted only when `write_filter_metrics` is
 `true`.
