@@ -3,6 +3,7 @@
 source("scripts/trans_window_io.R")
 source("scripts/trans_window_preprocess.R")
 source("scripts/trans_window_model.R")
+source("scripts/trans_window_prior.R")
 source("scripts/trans_window_cli.R")
 
 args <- parse_cli_args(
@@ -24,6 +25,9 @@ args <- parse_cli_args(
     optparse::make_option("--coverage", type = "double", default = 0.95),
     optparse::make_option("--min-abs-corr", type = "double", default = 0.5),
     optparse::make_option("--n-thread", type = "integer", default = 1L),
+    optparse::make_option("--prior-method", type = "character", default = "canonical"),
+    optparse::make_option("--mashr-n-pca", type = "integer", default = 5L),
+    optparse::make_option("--mashr-seed", type = "integer", default = NULL),
     optparse::make_option("--prepared-output", type = "character"),
     optparse::make_option("--fit-output", type = "character")
   ),
@@ -54,6 +58,8 @@ covariates_by_modality <- read_covariate_matrices(
 
 min_nonzero_fraction <- optional_cli_arg(args, "min_nonzero_fraction")
 if (!is.null(min_nonzero_fraction)) min_nonzero_fraction <- as.numeric(min_nonzero_fraction)
+mashr_seed <- optional_cli_arg(args, "mashr_seed")
+if (!is.null(mashr_seed)) mashr_seed <- as_cli_integer(args, "mashr_seed", 0L)
 prepared <- prepare_window_data(
   window = window,
   phenotype_data = phenotype_data,
@@ -72,7 +78,10 @@ config <- make_model_config(
   tol = as_cli_numeric(args, "tol", 1e-4),
   coverage = as_cli_numeric(args, "coverage", 0.95),
   min_abs_corr = as_cli_numeric(args, "min_abs_corr", 0.5),
-  n_thread = as_cli_integer(args, "n_thread", 1L)
+  n_thread = as_cli_integer(args, "n_thread", 1L),
+  prior_method = optional_cli_arg(args, "prior_method", "canonical"),
+  mashr_n_pca = as_cli_integer(args, "mashr_n_pca", 5L),
+  mashr_seed = mashr_seed
 )
 result <- fit_window_mvsusie(prepared, config)
 bundle <- list(

@@ -32,7 +32,10 @@ Downstream tasks create per-window summaries and merge them across windows.
 
 The workflow produces variant PIP tables, credible sets, component-effect
 tables, and window-level QC, along with merged versions of those outputs. The
-current WDL uses the canonical mvSuSiE prior.
+default uses the canonical mvSuSiE prior. Set prior_method to mashr to learn a
+window-specific prior. This option calculates marginal effects for all retained
+SNPs in the window, obtains PCA covariance inputs from all SNPs, and refines
+them with mashr extreme deconvolution before fitting the mashr mixture.
 
 ## Inputs and execution
 

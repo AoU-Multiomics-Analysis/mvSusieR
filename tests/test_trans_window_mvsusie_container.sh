@@ -12,6 +12,7 @@ test -s "$workflow"
 rg -q '^FROM rocker/r-ver:4[.]4[.]1$' "$dockerfile"
 rg -q 'stephenslab/mvsusieR' "$dockerfile"
 rg -q 'stephenslab/susieR' "$dockerfile"
+rg -q 'mashr' "$dockerfile"
 rg -q 'install_url' "$dockerfile"
 rg -q 'mvsusieR.*0[.]3[.]0' "$workflow"
 rg -q 'susieR.*0[.]15[.]54' "$workflow"
@@ -20,6 +21,7 @@ for script in \
   trans_window_io.R \
   trans_window_preprocess.R \
   trans_window_model.R \
+  trans_window_prior.R \
   trans_window_cli.R \
   run_window_mvsusie.R \
   summarize_window.R \

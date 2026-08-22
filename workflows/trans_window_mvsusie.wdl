@@ -16,6 +16,9 @@ workflow TransWindowMvSusie {
     Float min_genotype_variance = 1e-8
     Float min_phenotype_variance = 1e-8
     Int n_thread = 1
+    String prior_method = "canonical"
+    Int mashr_n_pca = 5
+    Int? mashr_seed
   }
 
   Array[Array[String]] window_rows = read_tsv(windows_tsv)
@@ -41,7 +44,10 @@ workflow TransWindowMvSusie {
         tol = tol,
         coverage = coverage,
         min_abs_corr = min_abs_corr,
-        n_thread = n_thread
+        n_thread = n_thread,
+        prior_method = prior_method,
+        mashr_n_pca = mashr_n_pca,
+        mashr_seed = mashr_seed
     }
 
     call SummarizeMvSusie {
@@ -91,6 +97,9 @@ task RunMvSusie {
     Float coverage
     Float min_abs_corr
     Int n_thread
+    String prior_method
+    Int mashr_n_pca
+    Int? mashr_seed
   }
 
   command <<<
@@ -113,6 +122,9 @@ task RunMvSusie {
       --coverage ~{coverage} \
       --min-abs-corr ~{min_abs_corr} \
       --n-thread ~{n_thread} \
+      --prior-method ~{prior_method} \
+      --mashr-n-pca ~{mashr_n_pca} \
+      ~{if defined(mashr_seed) then "--mashr-seed " + select_first([mashr_seed]) else ""} \
       --prepared-output prepared_window.rds \
       --fit-output mvsusie_fit.rds
   >>>

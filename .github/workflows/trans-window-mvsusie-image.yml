@@ -9,6 +9,7 @@ on:
       - "scripts/trans_window_io.R"
       - "scripts/trans_window_preprocess.R"
       - "scripts/trans_window_model.R"
+      - "scripts/trans_window_prior.R"
       - "scripts/trans_window_cli.R"
       - "scripts/run_window_mvsusie.R"
       - "scripts/summarize_window.R"
@@ -20,6 +21,7 @@ on:
       - "scripts/trans_window_io.R"
       - "scripts/trans_window_preprocess.R"
       - "scripts/trans_window_model.R"
+      - "scripts/trans_window_prior.R"
       - "scripts/trans_window_cli.R"
       - "scripts/run_window_mvsusie.R"
       - "scripts/summarize_window.R"
@@ -57,12 +59,14 @@ jobs:
           docker run --rm trans-window-mvsusie-ci:latest Rscript -e '
             stopifnot(requireNamespace("mvsusieR", quietly = TRUE))
             stopifnot(requireNamespace("susieR", quietly = TRUE))
+            stopifnot(requireNamespace("mashr", quietly = TRUE))
             stopifnot(packageVersion("mvsusieR") >= "0.3.0")
             stopifnot(packageVersion("susieR") >= "0.15.54")
             scripts <- c(
               "trans_window_io.R",
               "trans_window_preprocess.R",
               "trans_window_model.R",
+              "trans_window_prior.R",
               "trans_window_cli.R",
               "run_window_mvsusie.R",
               "summarize_window.R",

@@ -10,6 +10,10 @@ rg -q '^version 1[.]0$' workflows/trans_window_mvsusie.wdl
 rg -q 'covariate_modalities' workflows/trans_window_mvsusie.wdl
 rg -q 'sep="[,]" covariate_files' workflows/trans_window_mvsusie.wdl
 rg -q 'File phenotype_data' workflows/trans_window_mvsusie.wdl
+rg -q 'String prior_method = "canonical"' workflows/trans_window_mvsusie.wdl
+rg -q 'Int mashr_n_pca = 5' workflows/trans_window_mvsusie.wdl
+rg -q -- '--prior-method' workflows/trans_window_mvsusie.wdl
+rg -q -- '--mashr-n-pca' workflows/trans_window_mvsusie.wdl
 rg -q 'ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest' workflows/trans_window_mvsusie.wdl
 test "$(rg -c 'disks: "local-disk 500 SSD"' workflows/trans_window_mvsusie.wdl)" -eq 3
 test "$(rg -c 'memory: "16 GiB"' workflows/trans_window_mvsusie.wdl)" -eq 3

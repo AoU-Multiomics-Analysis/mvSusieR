@@ -34,12 +34,14 @@ RUN install2.r --error --skipinstalled --ncpus -1 \
 # tarballs directly and request only runtime dependencies; installing Suggests
 # would add unnecessary documentation and test-toolchain dependencies.
 RUN Rscript -e 'remotes::install_url("https://github.com/stephenslab/susieR/archive/refs/heads/master.tar.gz", dependencies = c("Depends", "Imports", "LinkingTo"), upgrade = "never")' \
+    && Rscript -e 'install.packages("mashr", repos = "https://cloud.r-project.org")' \
     && Rscript -e 'remotes::install_url("https://github.com/stephenslab/mvsusieR/archive/refs/heads/master.tar.gz", dependencies = c("Depends", "Imports", "LinkingTo"), upgrade = "never")' \
-    && Rscript -e 'stopifnot(utils::packageVersion("mvsusieR") >= "0.3.0", utils::packageVersion("susieR") >= "0.15.54")'
+    && Rscript -e 'stopifnot(requireNamespace("mashr", quietly = TRUE), utils::packageVersion("mvsusieR") >= "0.3.0", utils::packageVersion("susieR") >= "0.15.54")'
 
 COPY scripts/trans_window_io.R \
      scripts/trans_window_preprocess.R \
      scripts/trans_window_model.R \
+     scripts/trans_window_prior.R \
      scripts/trans_window_cli.R \
      scripts/run_window_mvsusie.R \
      scripts/summarize_window.R \
