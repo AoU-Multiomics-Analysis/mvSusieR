@@ -57,6 +57,21 @@ stopifnot(max(relative_shat_error) < 1e-6)
 set.seed(20260822)
 Bhat <- matrix(rnorm(72L * 3L), nrow = 72L, ncol = 3L)
 Shat <- matrix(runif(72L * 3L, min = 0.05, max = 0.2), nrow = 72L, ncol = 3L)
+rownames(Bhat) <- rownames(Shat) <- paste0("variant_", seq_len(nrow(Bhat)))
+colnames(Bhat) <- colnames(Shat) <- paste0("feature_", seq_len(ncol(Bhat)))
+
+association_path <- tempfile(fileext = ".tsv.gz")
+association_messages <- capture.output(
+  write_marginal_association_table(Bhat, Shat, association_path),
+  type = "message"
+)
+associations <- data.table::fread(association_path, check.names = FALSE)
+stopifnot(nrow(associations) == length(Bhat))
+stopifnot(identical(
+  names(associations),
+  c("variant_id", "feature_id", "bhat", "shat", "z", "p_value")
+))
+stopifnot(any(grepl("association table", association_messages, fixed = TRUE)))
 
 prior_messages <- capture.output(
   prior_fit <- learn_mashr_prior(
@@ -69,10 +84,15 @@ prior_messages <- capture.output(
 )
 
 stopifnot(inherits(prior_fit$prior, "mash_prior"))
-stopifnot(identical(prior_fit$covariance_training_scope, "all_snps_in_window"))
-stopifnot(identical(prior_fit$covariance_training_n, nrow(Bhat)))
+stopifnot(identical(prior_fit$mash_model_training_scope, "all_snps_in_window"))
+stopifnot(identical(prior_fit$mash_model_training_n, nrow(Bhat)))
+stopifnot(identical(prior_fit$covariance_training_scope, "strong_snps_in_window"))
+stopifnot(prior_fit$covariance_training_n <= nrow(Bhat))
+stopifnot(prior_fit$covariance_training_n >= 2L)
 stopifnot(isTRUE(prior_fit$extreme_deconvolution_used))
 stopifnot(prior_fit$n_covariance_inputs >= 1L)
+stopifnot(any(grepl("one-by-one", prior_messages, fixed = TRUE)))
+stopifnot(any(grepl("strong SNP rows", prior_messages, fixed = TRUE)))
 stopifnot(any(grepl("PCA covariance", prior_messages, fixed = TRUE)))
 stopifnot(any(grepl("extreme deconvolution", prior_messages, fixed = TRUE)))
 stopifnot(any(grepl("mashr mixture", prior_messages, fixed = TRUE)))

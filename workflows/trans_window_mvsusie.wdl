@@ -18,6 +18,7 @@ workflow TransWindowMvSusie {
     Int n_thread = 1
     String prior_method = "canonical"
     Int mashr_n_pca = 5
+    Float mashr_strong_lfsr = 0.05
     Int? mashr_seed
   }
 
@@ -47,6 +48,7 @@ workflow TransWindowMvSusie {
         n_thread = n_thread,
         prior_method = prior_method,
         mashr_n_pca = mashr_n_pca,
+        mashr_strong_lfsr = mashr_strong_lfsr,
         mashr_seed = mashr_seed
     }
 
@@ -99,6 +101,7 @@ task RunMvSusie {
     Int n_thread
     String prior_method
     Int mashr_n_pca
+    Float mashr_strong_lfsr
     Int? mashr_seed
   }
 
@@ -124,6 +127,7 @@ task RunMvSusie {
       --n-thread ~{n_thread} \
       --prior-method ~{prior_method} \
       --mashr-n-pca ~{mashr_n_pca} \
+      --mashr-strong-lfsr ~{mashr_strong_lfsr} \
       ~{if defined(mashr_seed) then "--mashr-seed " + select_first([mashr_seed]) else ""} \
       --prepared-output prepared_window.rds \
       --fit-output mvsusie_fit.rds

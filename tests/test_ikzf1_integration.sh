@@ -44,8 +44,13 @@ args <- commandArgs(trailingOnly = TRUE)
 bundle <- readRDS(args[[1L]])
 stopifnot(identical(bundle$metadata$prior, "mashr"))
 stopifnot(identical(
-  bundle$metadata$covariance_training_n,
+  bundle$metadata$mash_model_training_n,
   bundle$qc$retained_variants
+))
+stopifnot(bundle$metadata$covariance_training_n <= bundle$qc$retained_variants)
+stopifnot(identical(
+  bundle$metadata$covariance_training_scope,
+  "strong_snps_in_window"
 ))
 stopifnot(isTRUE(bundle$metadata$extreme_deconvolution_used))
 RS

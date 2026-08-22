@@ -28,6 +28,8 @@ args <- parse_cli_args(
     optparse::make_option("--prior-method", type = "character", default = "canonical"),
     optparse::make_option("--mashr-n-pca", type = "integer", default = 5L),
     optparse::make_option("--mashr-seed", type = "integer", default = NULL),
+    optparse::make_option("--mashr-strong-lfsr", type = "double", default = 0.05),
+    optparse::make_option("--marginal-output", type = "character", default = NULL),
     optparse::make_option("--prepared-output", type = "character"),
     optparse::make_option("--fit-output", type = "character")
   ),
@@ -100,7 +102,9 @@ config <- make_model_config(
   n_thread = as_cli_integer(args, "n_thread", 1L),
   prior_method = optional_cli_arg(args, "prior_method", "canonical"),
   mashr_n_pca = as_cli_integer(args, "mashr_n_pca", 5L),
-  mashr_seed = mashr_seed
+  mashr_seed = mashr_seed,
+  mashr_strong_lfsr = as_cli_numeric(args, "mashr_strong_lfsr", 0.05),
+  marginal_output = optional_cli_arg(args, "marginal_output")
 )
 result <- fit_window_mvsusie(prepared, config)
 bundle <- list(

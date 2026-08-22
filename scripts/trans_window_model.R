@@ -9,7 +9,9 @@ make_model_config <- function(
   n_thread = 1L,
   prior_method = "canonical",
   mashr_n_pca = 5L,
-  mashr_seed = NULL
+  mashr_seed = NULL,
+  mashr_strong_lfsr = 0.05,
+  marginal_output = NULL
 ) {
   if (!prior_method %in% c("canonical", "mashr")) {
     stop("prior_method must be either canonical or mashr.", call. = FALSE)
@@ -23,7 +25,9 @@ make_model_config <- function(
     n_thread = as.integer(n_thread),
     prior_method = prior_method,
     mashr_n_pca = as.integer(mashr_n_pca),
-    mashr_seed = mashr_seed
+    mashr_seed = mashr_seed,
+    mashr_strong_lfsr = as.numeric(mashr_strong_lfsr),
+    marginal_output = marginal_output
   )
 }
 
@@ -41,11 +45,19 @@ fit_window_mvsusie <- function(prepared, config) {
   prior_details <- if (identical(config$prior_method, "mashr")) {
     pipeline_log("Preparing all-SNP associations for mashr.")
     marginal <- compute_marginal_bhat_shat_matrix(prepared$X, prepared$Y)
+    if (!is.null(config$marginal_output)) {
+      write_marginal_association_table(
+        marginal$Bhat,
+        marginal$Shat,
+        config$marginal_output
+      )
+    }
     learn_mashr_prior(
       Bhat = marginal$Bhat,
       Shat = marginal$Shat,
       n_pca = config$mashr_n_pca,
-      seed = config$mashr_seed
+      seed = config$mashr_seed,
+      strong_lfsr = config$mashr_strong_lfsr
     )
   } else {
     canonical_prior <- make_canonical_prior(ncol(prepared$Y))
@@ -93,8 +105,15 @@ fit_window_mvsusie <- function(prepared, config) {
       prior = config$prior_method,
       prior_components = prior_details$n_prior_components,
       prior_covariance_inputs = prior_details$n_covariance_inputs,
+      pca_covariance_inputs = prior_details$pca_covariance_inputs,
+      mash_model_training_scope = prior_details$mash_model_training_scope,
+      mash_model_training_n = prior_details$mash_model_training_n,
       covariance_training_scope = prior_details$covariance_training_scope,
       covariance_training_n = prior_details$covariance_training_n,
+      covariance_significant_n = prior_details$covariance_significant_n,
+      covariance_selection_lfsr = prior_details$covariance_selection_lfsr,
+      covariance_selection_fallback_used =
+        prior_details$covariance_selection_fallback_used,
       extreme_deconvolution_used = prior_details$extreme_deconvolution_used,
       residual_variance_mode = "mvsusieR_default",
       mvsusieR_version = as.character(utils::packageVersion("mvsusieR")),

@@ -155,33 +155,144 @@ compute_marginal_bhat_shat_matrix <- function(X, Y, block_size = 1000L) {
   list(Bhat = Bhat, Shat = Shat)
 }
 
-learn_mashr_prior <- function(Bhat, Shat, n_pca = 5L, seed = NULL) {
+write_marginal_association_table <- function(Bhat, Shat, path) {
   validate_marginal_summary_statistics(Bhat, Shat)
-  if (length(n_pca) != 1L || is.na(n_pca) || n_pca < 1L) {
-    stop("n_pca must be a positive integer.", call. = FALSE)
+  if (length(path) != 1L || is.na(path) || !nzchar(path)) {
+    stop("path must be one non-empty file path.", call. = FALSE)
+  }
+  variant_ids <- rownames(Bhat)
+  if (is.null(variant_ids)) variant_ids <- paste0("variant_", seq_len(nrow(Bhat)))
+  feature_ids <- colnames(Bhat)
+  if (is.null(feature_ids)) feature_ids <- paste0("feature_", seq_len(ncol(Bhat)))
+
+  pipeline_log(sprintf(
+    "Writing the complete marginal association table with %d rows.",
+    length(Bhat)
+  ))
+  stage_time <- proc.time()[["elapsed"]]
+  output_parent <- dirname(path)
+  if (!dir.exists(output_parent)) {
+    dir.create(output_parent, recursive = TRUE, showWarnings = FALSE)
+  }
+  z <- as.vector(Bhat) / as.vector(Shat)
+  associations <- data.table::data.table(
+    variant_id = rep(variant_ids, times = ncol(Bhat)),
+    feature_id = rep(feature_ids, each = nrow(Bhat)),
+    bhat = as.vector(Bhat),
+    shat = as.vector(Shat),
+    z = z,
+    p_value = 2 * stats::pnorm(abs(z), lower.tail = FALSE)
+  )
+  data.table::fwrite(associations, path, sep = "\t", compress = "auto")
+  pipeline_log(sprintf(
+    "The marginal association table was saved in %.2f seconds.",
+    proc.time()[["elapsed"]] - stage_time
+  ))
+  invisible(path)
+}
+
+select_mashr_covariance_rows <- function(mash_data, n_pca, lfsr_threshold) {
+  stage_time <- proc.time()[["elapsed"]]
+  pipeline_log(sprintf(
+    "Starting the one-by-one mashr fit for strong-row selection at lfsr <= %.3g.",
+    lfsr_threshold
+  ))
+  one_by_one <- mashr::mash_1by1(mash_data)
+  strong_rows <- mashr::get_significant_results(
+    one_by_one,
+    thresh = lfsr_threshold
+  )
+  significant_n <- length(strong_rows)
+  fallback_used <- FALSE
+  if (significant_n < n_pca) {
+    fallback_used <- TRUE
+    minimum_lfsr <- apply(one_by_one$result$lfsr, 1L, min)
+    strong_rows <- head(order(minimum_lfsr), n_pca)
+    pipeline_log(sprintf(
+      paste(
+        "Only %d rows passed the strong-row threshold; using the %d rows",
+        "with the smallest lfsr values for covariance training."
+      ),
+      significant_n, length(strong_rows)
+    ))
+  }
+  pipeline_log(sprintf(
+    paste(
+      "Selected %d strong SNP rows from %d total rows in %.2f seconds",
+      "for PCA and extreme deconvolution."
+    ),
+    length(strong_rows), nrow(mash_data$Bhat),
+    proc.time()[["elapsed"]] - stage_time
+  ))
+  list(
+    rows = as.integer(strong_rows),
+    significant_n = significant_n,
+    fallback_used = fallback_used
+  )
+}
+
+learn_mashr_prior <- function(
+  Bhat,
+  Shat,
+  n_pca = 5L,
+  seed = NULL,
+  strong_lfsr = 0.05
+) {
+  validate_marginal_summary_statistics(Bhat, Shat)
+  if (length(n_pca) != 1L || is.na(n_pca) || n_pca < 2L) {
+    stop("n_pca must be an integer of at least two.", call. = FALSE)
+  }
+  if (
+    length(strong_lfsr) != 1L || is.na(strong_lfsr) ||
+    strong_lfsr <= 0 || strong_lfsr >= 1
+  ) {
+    stop("strong_lfsr must be between zero and one.", call. = FALSE)
   }
   if (!is.null(seed)) set.seed(seed)
 
   mash_data <- make_mashr_data(Bhat, Shat)
-  n_pca <- min(as.integer(n_pca), ncol(Bhat))
+  n_pca <- min(as.integer(n_pca), ncol(Bhat), nrow(Bhat))
+  covariance_selection <- select_mashr_covariance_rows(
+    mash_data,
+    n_pca = n_pca,
+    lfsr_threshold = strong_lfsr
+  )
+  covariance_rows <- covariance_selection$rows
   stage_time <- proc.time()[["elapsed"]]
-  pipeline_log(sprintf("Starting %d PCA covariance inputs.", n_pca))
-  pca_covariances <- mashr::cov_pca(mash_data, npc = n_pca)
+  pipeline_log(sprintf(
+    "Starting %d PCA covariance inputs on %d selected rows.",
+    n_pca, length(covariance_rows)
+  ))
+  pca_covariances <- mashr::cov_pca(
+    mash_data,
+    npc = n_pca,
+    subset = covariance_rows
+  )
   pipeline_log(sprintf(
     "PCA covariance inputs complete in %.2f seconds.",
     proc.time()[["elapsed"]] - stage_time
   ))
 
   stage_time <- proc.time()[["elapsed"]]
-  pipeline_log("Starting extreme deconvolution.")
-  ed_covariances <- mashr::cov_ed(mash_data, Ulist_init = pca_covariances)
+  pipeline_log(sprintf(
+    "Starting extreme deconvolution on %d selected rows.",
+    length(covariance_rows)
+  ))
+  ed_covariances <- mashr::cov_ed(
+    mash_data,
+    Ulist_init = pca_covariances,
+    subset = covariance_rows
+  )
   pipeline_log(sprintf(
     "Extreme deconvolution complete in %.2f seconds.",
     proc.time()[["elapsed"]] - stage_time
   ))
 
   stage_time <- proc.time()[["elapsed"]]
-  pipeline_log("Starting the mashr mixture fit.")
+  pipeline_log(sprintf(
+    "Starting the mashr mixture fit on all %d SNP rows.",
+    nrow(Bhat)
+  ))
   mash_fit <- mashr::mash(
     data = mash_data,
     Ulist = ed_covariances,
@@ -211,8 +322,13 @@ learn_mashr_prior <- function(Bhat, Shat, n_pca = 5L, seed = NULL) {
     prior = prior,
     Bhat = Bhat,
     Shat = Shat,
-    covariance_training_scope = "all_snps_in_window",
-    covariance_training_n = nrow(Bhat),
+    mash_model_training_scope = "all_snps_in_window",
+    mash_model_training_n = nrow(Bhat),
+    covariance_training_scope = "strong_snps_in_window",
+    covariance_training_n = length(covariance_rows),
+    covariance_significant_n = covariance_selection$significant_n,
+    covariance_selection_lfsr = strong_lfsr,
+    covariance_selection_fallback_used = covariance_selection$fallback_used,
     pca_covariance_inputs = length(pca_covariances),
     extreme_deconvolution_used = TRUE,
     n_covariance_inputs = length(ed_covariances),

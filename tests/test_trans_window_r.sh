@@ -60,6 +60,7 @@ Rscript scripts/fit_window.R \
   --prior-method mashr \
   --mashr-n-pca 2 \
   --mashr-seed 1 \
+  --marginal-output "$tmp_dir/marginal_associations.tsv.gz" \
   --output "$tmp_dir/resumed_mvsusie_fit.rds" \
   2>&1 | tee "$tmp_dir/fit_window.log"
 
@@ -82,6 +83,7 @@ for output in \
   "$tmp_dir/prepared_window.rds" \
   "$tmp_dir/mvsusie_fit.rds" \
   "$tmp_dir/resumed_mvsusie_fit.rds" \
+  "$tmp_dir/marginal_associations.tsv.gz" \
   "$tmp_dir/window/variant_pip.tsv.gz" \
   "$tmp_dir/window/credible_sets.tsv.gz" \
   "$tmp_dir/window/component_effects.tsv.gz" \
@@ -109,7 +111,8 @@ Rscript - "$tmp_dir/mvsusie_fit.rds" <<'RS'
 args <- commandArgs(trailingOnly = TRUE)
 fit <- readRDS(args[[1L]])
 stopifnot(identical(fit$metadata$prior, "mashr"))
-stopifnot(identical(fit$metadata$covariance_training_scope, "all_snps_in_window"))
+stopifnot(identical(fit$metadata$mash_model_training_scope, "all_snps_in_window"))
+stopifnot(identical(fit$metadata$covariance_training_scope, "strong_snps_in_window"))
 stopifnot(isTRUE(fit$metadata$extreme_deconvolution_used))
 RS
 
@@ -117,7 +120,18 @@ Rscript - "$tmp_dir/resumed_mvsusie_fit.rds" <<'RS'
 args <- commandArgs(trailingOnly = TRUE)
 fit <- readRDS(args[[1L]])
 stopifnot(identical(fit$metadata$prior, "mashr"))
-stopifnot(identical(fit$metadata$covariance_training_scope, "all_snps_in_window"))
+stopifnot(identical(fit$metadata$mash_model_training_scope, "all_snps_in_window"))
+stopifnot(identical(fit$metadata$covariance_training_scope, "strong_snps_in_window"))
+RS
+
+Rscript - "$tmp_dir/marginal_associations.tsv.gz" <<'RS'
+args <- commandArgs(trailingOnly = TRUE)
+associations <- data.table::fread(args[[1L]], check.names = FALSE)
+stopifnot(nrow(associations) == 18L)
+stopifnot(identical(
+  names(associations),
+  c("variant_id", "feature_id", "bhat", "shat", "z", "p_value")
+))
 RS
 
 echo "Task 4 entrypoint tests passed"
