@@ -33,7 +33,24 @@ Rscript scripts/run_window_mvsusie.R \
   --mashr-n-pca 2 \
   --mashr-seed 1 \
   --prepared-output "$tmp_dir/prepared_window.rds" \
-  --fit-output "$tmp_dir/mvsusie_fit.rds"
+  --fit-output "$tmp_dir/mvsusie_fit.rds" \
+  2>&1 | tee "$tmp_dir/run_window.log"
+
+grep -q 'Reading genotype data' "$tmp_dir/run_window.log"
+grep -q 'Residualizing genotype and phenotype matrices' "$tmp_dir/run_window.log"
+grep -q 'Computing the all-SNP cross-product' "$tmp_dir/run_window.log"
+grep -q 'Starting extreme deconvolution' "$tmp_dir/run_window.log"
+
+Rscript scripts/fit_window.R \
+  --prepared "$tmp_dir/prepared_window.rds" \
+  --prior-method mashr \
+  --mashr-n-pca 2 \
+  --mashr-seed 1 \
+  --output "$tmp_dir/resumed_mvsusie_fit.rds" \
+  2>&1 | tee "$tmp_dir/fit_window.log"
+
+grep -q 'Reading prepared window data' "$tmp_dir/fit_window.log"
+grep -q 'Computing the all-SNP cross-product' "$tmp_dir/fit_window.log"
 
 Rscript scripts/summarize_window.R \
   --prepared "$tmp_dir/prepared_window.rds" \
@@ -50,6 +67,7 @@ Rscript scripts/merge_window_outputs.R \
 for output in \
   "$tmp_dir/prepared_window.rds" \
   "$tmp_dir/mvsusie_fit.rds" \
+  "$tmp_dir/resumed_mvsusie_fit.rds" \
   "$tmp_dir/window/variant_pip.tsv.gz" \
   "$tmp_dir/window/credible_sets.tsv.gz" \
   "$tmp_dir/window/component_effects.tsv.gz" \
@@ -79,6 +97,13 @@ fit <- readRDS(args[[1L]])
 stopifnot(identical(fit$metadata$prior, "mashr"))
 stopifnot(identical(fit$metadata$covariance_training_scope, "all_snps_in_window"))
 stopifnot(isTRUE(fit$metadata$extreme_deconvolution_used))
+RS
+
+Rscript - "$tmp_dir/resumed_mvsusie_fit.rds" <<'RS'
+args <- commandArgs(trailingOnly = TRUE)
+fit <- readRDS(args[[1L]])
+stopifnot(identical(fit$metadata$prior, "mashr"))
+stopifnot(identical(fit$metadata$covariance_training_scope, "all_snps_in_window"))
 RS
 
 echo "Task 4 entrypoint tests passed"

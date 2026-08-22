@@ -16,6 +16,32 @@ residualize_matrix <- function(M, covariate_model) {
   qr.resid(covariate_model, M)
 }
 
+make_genotype_covariates <- function(modality_covariates) {
+  covariate_ids <- unique(unlist(lapply(modality_covariates, colnames)))
+  conflicting_ids <- covariate_ids[vapply(covariate_ids, function(covariate_id) {
+    values <- lapply(modality_covariates, function(matrix) {
+      if (!covariate_id %in% colnames(matrix)) return(NULL)
+      matrix[, covariate_id]
+    })
+    values <- Filter(Negate(is.null), values)
+    any(!vapply(values[-1L], function(value) {
+      isTRUE(all.equal(values[[1L]], value))
+    }, logical(1L)))
+  }, logical(1L))]
+
+  genotype_parts <- Map(function(matrix, modality) {
+    renamed <- matrix
+    conflict <- colnames(renamed) %in% conflicting_ids
+    colnames(renamed)[conflict] <- paste(
+      modality,
+      colnames(renamed)[conflict],
+      sep = "::"
+    )
+    renamed
+  }, modality_covariates, names(modality_covariates))
+  unique_covariate_columns(genotype_parts)
+}
+
 prepare_window_data <- function(
   window,
   phenotype_data,
@@ -71,7 +97,7 @@ prepare_window_data <- function(
     unique_covariate_columns(matrices)
   })
   names(modality_covariates) <- unique(phenotype_modalities)
-  genotype_covariates <- unique_covariate_columns(modality_covariates)
+  genotype_covariates <- make_genotype_covariates(modality_covariates)
 
   requested_samples <- read_keep_samples(keep_samples)
   covariate_samples <- Reduce(

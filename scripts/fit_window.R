@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 
 source("scripts/trans_window_model.R")
+source("scripts/trans_window_prior.R")
 source("scripts/trans_window_cli.R")
 
 args <- parse_cli_args(
@@ -12,18 +13,31 @@ args <- parse_cli_args(
     optparse::make_option("--coverage", type = "double", default = 0.95),
     optparse::make_option("--min-abs-corr", type = "double", default = 0.5),
     optparse::make_option("--n-thread", type = "integer", default = 1L),
+    optparse::make_option("--prior-method", type = "character", default = "canonical"),
+    optparse::make_option("--mashr-n-pca", type = "integer", default = 5L),
+    optparse::make_option("--mashr-seed", type = "integer", default = NULL),
     optparse::make_option("--output", type = "character")
   ),
   description = "Fit mvSusieR for one prepared trans window."
 )
+pipeline_log("Reading prepared window data.")
 prepared <- readRDS(require_cli_arg(args, "prepared"))
+pipeline_log(sprintf(
+  "Prepared data loaded: %d samples, %d variants, and %d outcomes.",
+  nrow(prepared$X), ncol(prepared$X), ncol(prepared$Y)
+))
+mashr_seed <- optional_cli_arg(args, "mashr_seed")
+if (!is.null(mashr_seed)) mashr_seed <- as_cli_integer(args, "mashr_seed", 0L)
 config <- make_model_config(
   L = as_cli_integer(args, "L", 10L),
   max_iter = as_cli_integer(args, "max_iter", 100L),
   tol = as_cli_numeric(args, "tol", 1e-4),
   coverage = as_cli_numeric(args, "coverage", 0.95),
   min_abs_corr = as_cli_numeric(args, "min_abs_corr", 0.5),
-  n_thread = as_cli_integer(args, "n_thread", 1L)
+  n_thread = as_cli_integer(args, "n_thread", 1L),
+  prior_method = optional_cli_arg(args, "prior_method", "canonical"),
+  mashr_n_pca = as_cli_integer(args, "mashr_n_pca", 5L),
+  mashr_seed = mashr_seed
 )
 result <- fit_window_mvsusie(prepared, config)
 bundle <- list(
@@ -37,4 +51,6 @@ bundle <- list(
   phenotype_covariate_rank = prepared$phenotype_covariate_rank,
   qc = prepared$qc
 )
+pipeline_log("Saving the mvSuSiE fit bundle.")
 save_rds_checked(bundle, require_cli_arg(args, "output"))
+pipeline_log("The mvSuSiE fit bundle was saved.")

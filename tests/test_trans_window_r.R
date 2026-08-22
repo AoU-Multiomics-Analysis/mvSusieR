@@ -31,6 +31,21 @@ covariates <- read_covariate_matrix(
 stopifnot(identical(dim(covariates), c(6L, 2L)))
 stopifnot(identical(rownames(covariates), as.character(1:6)))
 
+numeric_header_covariates_path <- tempfile(fileext = ".tsv")
+writeLines(
+  c(
+    "ID\t1001\t1002\t1003",
+    "PC1\t1\t2\t3",
+    "PC2\t4\t5\t6"
+  ),
+  numeric_header_covariates_path
+)
+numeric_header_covariates <- read_covariate_file(
+  numeric_header_covariates_path
+)
+stopifnot(identical(rownames(numeric_header_covariates), c("1001", "1002", "1003")))
+stopifnot(identical(colnames(numeric_header_covariates), c("PC1", "PC2")))
+
 covariates_by_modality <- read_covariate_matrices(
   paths = c(
     fixture("covariates.tsv"),
@@ -89,6 +104,24 @@ for (modality in unique(prepared_modality$phenotype_metadata$modality)) {
     abs(max(abs(crossprod(phenotype_model, prepared_modality$Y[, phenotype_indices, drop = FALSE])))) < 1e-6
   )
 }
+
+expression_pc <- matrix(seq_len(6L), ncol = 1L,
+                        dimnames = list(as.character(1:6), "PC1"))
+splicing_pc <- matrix(rep(c(-1, 1), 3L), ncol = 1L,
+                      dimnames = list(as.character(1:6), "PC1"))
+conflicting_modality_covariates <- list(
+  expression = expression_pc,
+  splicing = splicing_pc,
+  isoform_usage = expression_pc
+)
+prepared_conflicting_names <- prepare_window_data(
+  window = windows[1],
+  phenotype_data = phenotype_data,
+  dosage = dosage,
+  covariates_by_modality = conflicting_modality_covariates
+)
+stopifnot(ncol(prepared_conflicting_names$X) == ncol(dosage$X))
+stopifnot(all(is.finite(prepared_conflicting_names$X)))
 
 bad_covariates <- covariates
 rownames(bad_covariates) <- paste0("missing_", seq_len(nrow(bad_covariates)))

@@ -1,3 +1,5 @@
+source("scripts/trans_window_logging.R")
+
 make_model_config <- function(
   L = 10L,
   max_iter = 100L,
@@ -37,14 +39,8 @@ fit_window_mvsusie <- function(prepared, config) {
     stop("Prepared genotype and phenotype matrices have different sample counts.", call. = FALSE)
   }
   prior_details <- if (identical(config$prior_method, "mashr")) {
-    if (!requireNamespace("susieR", quietly = TRUE)) {
-      stop("The susieR package is required to compute marginal effects.", call. = FALSE)
-    }
-    standardized_x <- scale(prepared$X, center = TRUE, scale = TRUE)
-    marginal <- susieR::compute_marginal_bhat_shat(
-      X = standardized_x,
-      Y = prepared$Y
-    )
+    pipeline_log("Preparing all-SNP associations for mashr.")
+    marginal <- compute_marginal_bhat_shat_matrix(prepared$X, prepared$Y)
     learn_mashr_prior(
       Bhat = marginal$Bhat,
       Shat = marginal$Shat,
@@ -63,6 +59,7 @@ fit_window_mvsusie <- function(prepared, config) {
     )
   }
   prior <- prior_details$prior
+  pipeline_log("Starting mvSuSiE with verbose iteration output.")
   fit <- mvsusieR::mvsusie(
     X = prepared$X,
     Y = prepared$Y,
@@ -88,6 +85,7 @@ fit_window_mvsusie <- function(prepared, config) {
       call. = FALSE
     )
   }
+  pipeline_log(sprintf("mvSuSiE converged after %d iterations.", fit$niter))
   list(
     fit = fit,
     metadata = list(

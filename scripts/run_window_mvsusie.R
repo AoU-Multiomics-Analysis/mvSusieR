@@ -34,6 +34,7 @@ args <- parse_cli_args(
   description = "Prepare and fit mvSusieR for one trans window."
 )
 
+pipeline_log("Reading window and phenotype manifests.")
 windows <- read_windows_manifest(require_cli_arg(args, "windows"))
 phenotype_manifest <- read_window_phenotypes_manifest(
   require_cli_arg(args, "window_phenotypes")
@@ -49,8 +50,19 @@ covariate_files <- split_cli_paths(require_cli_arg(args, "covariate_files"))
 covariate_modalities <- split_cli_paths(
   optional_cli_arg(args, "covariate_modalities", "shared")
 )
+pipeline_log("Reading genotype data.")
 dosage <- read_wide_dosage(require_cli_arg(args, "dosage"))
+pipeline_log(sprintf(
+  "Genotype data loaded: %d samples and %d variants.",
+  nrow(dosage$X), ncol(dosage$X)
+))
+pipeline_log("Reading selected phenotype data.")
 phenotype_data <- read_window_phenotypes(window_id, phenotype_manifest, phenotype_files)
+pipeline_log(sprintf(
+  "Phenotype data loaded: %d samples and %d outcomes.",
+  nrow(phenotype_data$Y), ncol(phenotype_data$Y)
+))
+pipeline_log("Reading modality-specific covariates.")
 covariates_by_modality <- read_covariate_matrices(
   paths = covariate_files,
   modalities = covariate_modalities
@@ -60,6 +72,7 @@ min_nonzero_fraction <- optional_cli_arg(args, "min_nonzero_fraction")
 if (!is.null(min_nonzero_fraction)) min_nonzero_fraction <- as.numeric(min_nonzero_fraction)
 mashr_seed <- optional_cli_arg(args, "mashr_seed")
 if (!is.null(mashr_seed)) mashr_seed <- as_cli_integer(args, "mashr_seed", 0L)
+pipeline_log("Residualizing genotype and phenotype matrices.")
 prepared <- prepare_window_data(
   window = window,
   phenotype_data = phenotype_data,
@@ -70,7 +83,13 @@ prepared <- prepare_window_data(
   min_phenotype_variance = as_cli_numeric(args, "min_phenotype_variance", 1e-8),
   min_nonzero_fraction = min_nonzero_fraction
 )
+pipeline_log(sprintf(
+  "Preprocessing complete: %d samples, %d variants, and %d outcomes retained.",
+  nrow(prepared$X), ncol(prepared$X), ncol(prepared$Y)
+))
+pipeline_log("Saving prepared window data.")
 save_rds_checked(prepared, require_cli_arg(args, "prepared_output"))
+pipeline_log("Prepared window data saved.")
 
 config <- make_model_config(
   L = as_cli_integer(args, "L", 10L),
@@ -95,4 +114,6 @@ bundle <- list(
   phenotype_covariate_rank = prepared$phenotype_covariate_rank,
   qc = prepared$qc
 )
+pipeline_log("Saving the mvSuSiE fit bundle.")
 save_rds_checked(bundle, require_cli_arg(args, "fit_output"))
+pipeline_log("The mvSuSiE fit bundle was saved.")

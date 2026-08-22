@@ -210,6 +210,14 @@ read_window_phenotypes <- function(window_id, phenotype_manifest, phenotype_file
 
 read_covariate_file <- function(path) {
   dt <- fread(path, check.names = FALSE)
+  if (
+    identical(names(dt)[[1L]], "V1") && nrow(dt) > 0L &&
+    identical(toupper(as.character(dt[[1L]][[1L]])), "ID")
+  ) {
+    header <- as.character(dt[1L])
+    dt <- dt[-1L]
+    setnames(dt, header)
+  }
   if (ncol(dt) < 2L) stop("Covariate file has no sample columns: ", path, call. = FALSE)
   covariate_ids <- as.character(dt[[1L]])
   if (anyDuplicated(covariate_ids)) {
