@@ -4,6 +4,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+rg -q 'verbose = TRUE' scripts/trans_window_model.R
+
 Rscript tests/test_build_trans_window_tensorqtl.R scripts/build_trans_window_tensorqtl.R
 
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/trans-window-r.XXXXXX")"

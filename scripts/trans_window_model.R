@@ -79,7 +79,7 @@ fit_window_mvsusie <- function(prepared, config) {
     n_thread = config$n_thread,
     max_iter = config$max_iter,
     tol = config$tol,
-    verbose = FALSE
+    verbose = TRUE
   )
   if (!isTRUE(fit$converged)) {
     stop(
