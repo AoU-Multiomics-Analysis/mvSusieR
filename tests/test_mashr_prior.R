@@ -97,4 +97,19 @@ stopifnot(any(grepl("PCA covariance", prior_messages, fixed = TRUE)))
 stopifnot(any(grepl("extreme deconvolution", prior_messages, fixed = TRUE)))
 stopifnot(any(grepl("mashr mixture", prior_messages, fixed = TRUE)))
 
+pca_only_messages <- capture.output(
+  pca_only_prior <- learn_mashr_prior(
+    Bhat = Bhat,
+    Shat = Shat,
+    n_pca = 2L,
+    seed = 1L,
+    use_extreme_deconvolution = FALSE
+  ),
+  type = "message"
+)
+stopifnot(!isTRUE(pca_only_prior$extreme_deconvolution_used))
+stopifnot(identical(pca_only_prior$covariance_input_method, "pca_only"))
+stopifnot(any(grepl("Skipping extreme deconvolution", pca_only_messages, fixed = TRUE)))
+stopifnot(!any(grepl("Starting extreme deconvolution", pca_only_messages, fixed = TRUE)))
+
 message("All-SNP mashr prior tests passed")

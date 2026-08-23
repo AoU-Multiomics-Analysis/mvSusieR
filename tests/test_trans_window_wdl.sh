@@ -13,9 +13,11 @@ rg -q 'File phenotype_data' workflows/trans_window_mvsusie.wdl
 rg -q 'String prior_method = "canonical"' workflows/trans_window_mvsusie.wdl
 rg -q 'Int mashr_n_pca = 5' workflows/trans_window_mvsusie.wdl
 rg -q 'Float mashr_strong_lfsr = 0.05' workflows/trans_window_mvsusie.wdl
+rg -q 'Boolean mashr_use_ed = true' workflows/trans_window_mvsusie.wdl
 rg -q -- '--prior-method' workflows/trans_window_mvsusie.wdl
 rg -q -- '--mashr-n-pca' workflows/trans_window_mvsusie.wdl
 rg -q -- '--mashr-strong-lfsr' workflows/trans_window_mvsusie.wdl
+rg -q -- '--mashr-skip-ed' workflows/trans_window_mvsusie.wdl
 rg -q 'ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest' workflows/trans_window_mvsusie.wdl
 test "$(rg -c 'disks: "local-disk 500 SSD"' workflows/trans_window_mvsusie.wdl)" -eq 3
 test "$(rg -c 'memory: "16 GiB"' workflows/trans_window_mvsusie.wdl)" -eq 3

@@ -236,7 +236,8 @@ learn_mashr_prior <- function(
   Shat,
   n_pca = 5L,
   seed = NULL,
-  strong_lfsr = 0.05
+  strong_lfsr = 0.05,
+  use_extreme_deconvolution = TRUE
 ) {
   validate_marginal_summary_statistics(Bhat, Shat)
   if (length(n_pca) != 1L || is.na(n_pca) || n_pca < 2L) {
@@ -247,6 +248,12 @@ learn_mashr_prior <- function(
     strong_lfsr <= 0 || strong_lfsr >= 1
   ) {
     stop("strong_lfsr must be between zero and one.", call. = FALSE)
+  }
+  if (
+    length(use_extreme_deconvolution) != 1L ||
+    is.na(use_extreme_deconvolution)
+  ) {
+    stop("use_extreme_deconvolution must be TRUE or FALSE.", call. = FALSE)
   }
   if (!is.null(seed)) set.seed(seed)
 
@@ -273,20 +280,25 @@ learn_mashr_prior <- function(
     proc.time()[["elapsed"]] - stage_time
   ))
 
-  stage_time <- proc.time()[["elapsed"]]
-  pipeline_log(sprintf(
-    "Starting extreme deconvolution on %d selected rows.",
-    length(covariance_rows)
-  ))
-  ed_covariances <- mashr::cov_ed(
-    mash_data,
-    Ulist_init = pca_covariances,
-    subset = covariance_rows
-  )
-  pipeline_log(sprintf(
-    "Extreme deconvolution complete in %.2f seconds.",
-    proc.time()[["elapsed"]] - stage_time
-  ))
+  covariance_inputs <- pca_covariances
+  if (isTRUE(use_extreme_deconvolution)) {
+    stage_time <- proc.time()[["elapsed"]]
+    pipeline_log(sprintf(
+      "Starting extreme deconvolution on %d selected rows.",
+      length(covariance_rows)
+    ))
+    covariance_inputs <- mashr::cov_ed(
+      mash_data,
+      Ulist_init = pca_covariances,
+      subset = covariance_rows
+    )
+    pipeline_log(sprintf(
+      "Extreme deconvolution complete in %.2f seconds.",
+      proc.time()[["elapsed"]] - stage_time
+    ))
+  } else {
+    pipeline_log("Skipping extreme deconvolution; using PCA covariance inputs.")
+  }
 
   stage_time <- proc.time()[["elapsed"]]
   pipeline_log(sprintf(
@@ -295,7 +307,7 @@ learn_mashr_prior <- function(
   ))
   mash_fit <- mashr::mash(
     data = mash_data,
-    Ulist = ed_covariances,
+    Ulist = covariance_inputs,
     usepointmass = TRUE,
     outputlevel = 0,
     verbose = TRUE
@@ -308,14 +320,14 @@ learn_mashr_prior <- function(
     fitted_g = mash_fit$fitted_g,
     null_weight = 0
   )
-  fallback_to_ed_covariances <- FALSE
+  fallback_to_input_covariances <- FALSE
   if (!length(prior$xUlist)) {
     prior <- mvsusieR::create_mixture_prior(
-      mixture_prior = list(matrices = ed_covariances),
+      mixture_prior = list(matrices = covariance_inputs),
       null_weight = 0,
       weights_tol = 0
     )
-    fallback_to_ed_covariances <- TRUE
+    fallback_to_input_covariances <- TRUE
   }
 
   list(
@@ -330,10 +342,15 @@ learn_mashr_prior <- function(
     covariance_selection_lfsr = strong_lfsr,
     covariance_selection_fallback_used = covariance_selection$fallback_used,
     pca_covariance_inputs = length(pca_covariances),
-    extreme_deconvolution_used = TRUE,
-    n_covariance_inputs = length(ed_covariances),
+    extreme_deconvolution_used = isTRUE(use_extreme_deconvolution),
+    covariance_input_method = if (isTRUE(use_extreme_deconvolution)) {
+      "pca_then_extreme_deconvolution"
+    } else {
+      "pca_only"
+    },
+    n_covariance_inputs = length(covariance_inputs),
     n_prior_components = length(prior$xUlist),
-    fallback_to_ed_covariances = fallback_to_ed_covariances,
+    fallback_to_input_covariances = fallback_to_input_covariances,
     fitted_g = mash_fit$fitted_g
   )
 }

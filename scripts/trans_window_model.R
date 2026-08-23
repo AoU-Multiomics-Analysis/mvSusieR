@@ -11,6 +11,7 @@ make_model_config <- function(
   mashr_n_pca = 5L,
   mashr_seed = NULL,
   mashr_strong_lfsr = 0.05,
+  mashr_use_ed = TRUE,
   marginal_output = NULL
 ) {
   if (!prior_method %in% c("canonical", "mashr")) {
@@ -27,6 +28,7 @@ make_model_config <- function(
     mashr_n_pca = as.integer(mashr_n_pca),
     mashr_seed = mashr_seed,
     mashr_strong_lfsr = as.numeric(mashr_strong_lfsr),
+    mashr_use_ed = isTRUE(mashr_use_ed),
     marginal_output = marginal_output
   )
 }
@@ -57,7 +59,8 @@ fit_window_mvsusie <- function(prepared, config) {
       Shat = marginal$Shat,
       n_pca = config$mashr_n_pca,
       seed = config$mashr_seed,
-      strong_lfsr = config$mashr_strong_lfsr
+      strong_lfsr = config$mashr_strong_lfsr,
+      use_extreme_deconvolution = config$mashr_use_ed
     )
   } else {
     canonical_prior <- make_canonical_prior(ncol(prepared$Y))
@@ -120,6 +123,7 @@ fit_window_mvsusie <- function(prepared, config) {
       covariance_selection_fallback_used =
         prior_details$covariance_selection_fallback_used,
       extreme_deconvolution_used = prior_details$extreme_deconvolution_used,
+      covariance_input_method = prior_details$covariance_input_method,
       prior_mixture_weights_mode = if (fix_mashr_mixture_weights) {
         "fixed_from_mashr"
       } else {

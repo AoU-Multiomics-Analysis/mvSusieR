@@ -60,12 +60,14 @@ Rscript scripts/fit_window.R \
   --prior-method mashr \
   --mashr-n-pca 2 \
   --mashr-seed 1 \
+  --mashr-skip-ed \
   --marginal-output "$tmp_dir/marginal_associations.tsv.gz" \
   --output "$tmp_dir/resumed_mvsusie_fit.rds" \
   2>&1 | tee "$tmp_dir/fit_window.log"
 
 grep -q 'Reading prepared window data' "$tmp_dir/fit_window.log"
 grep -q 'Computing the all-SNP cross-product' "$tmp_dir/fit_window.log"
+grep -q 'Skipping extreme deconvolution' "$tmp_dir/fit_window.log"
 
 Rscript scripts/summarize_window.R \
   --prepared "$tmp_dir/prepared_window.rds" \
@@ -124,6 +126,8 @@ stopifnot(identical(fit$metadata$prior, "mashr"))
 stopifnot(identical(fit$metadata$mash_model_training_scope, "all_snps_in_window"))
 stopifnot(identical(fit$metadata$covariance_training_scope, "strong_snps_in_window"))
 stopifnot(identical(fit$metadata$prior_mixture_weights_mode, "fixed_from_mashr"))
+stopifnot(!isTRUE(fit$metadata$extreme_deconvolution_used))
+stopifnot(identical(fit$metadata$covariance_input_method, "pca_only"))
 RS
 
 Rscript - "$tmp_dir/marginal_associations.tsv.gz" <<'RS'
