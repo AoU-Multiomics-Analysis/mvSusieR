@@ -71,6 +71,10 @@ fit_window_mvsusie <- function(prepared, config) {
     )
   }
   prior <- prior_details$prior
+  fix_mashr_mixture_weights <- identical(config$prior_method, "mashr")
+  if (fix_mashr_mixture_weights) {
+    pipeline_log("Using the fitted mashr mixture weights without re-estimation.")
+  }
   pipeline_log("Starting mvSuSiE with verbose iteration output.")
   fit <- mvsusieR::mvsusie(
     X = prepared$X,
@@ -82,6 +86,7 @@ fit_window_mvsusie <- function(prepared, config) {
     intercept = FALSE,
     estimate_residual_variance = TRUE,
     estimate_prior_variance = FALSE,
+    estimate_prior_mixture_weights = !fix_mashr_mixture_weights,
     coverage = config$coverage,
     min_abs_corr = config$min_abs_corr,
     precompute_cache = TRUE,
@@ -115,6 +120,11 @@ fit_window_mvsusie <- function(prepared, config) {
       covariance_selection_fallback_used =
         prior_details$covariance_selection_fallback_used,
       extreme_deconvolution_used = prior_details$extreme_deconvolution_used,
+      prior_mixture_weights_mode = if (fix_mashr_mixture_weights) {
+        "fixed_from_mashr"
+      } else {
+        "estimated_by_mvsusie"
+      },
       residual_variance_mode = "mvsusieR_default",
       mvsusieR_version = as.character(utils::packageVersion("mvsusieR")),
       config = config,

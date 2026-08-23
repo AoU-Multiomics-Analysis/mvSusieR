@@ -113,6 +113,7 @@ fit <- readRDS(args[[1L]])
 stopifnot(identical(fit$metadata$prior, "mashr"))
 stopifnot(identical(fit$metadata$mash_model_training_scope, "all_snps_in_window"))
 stopifnot(identical(fit$metadata$covariance_training_scope, "strong_snps_in_window"))
+stopifnot(identical(fit$metadata$prior_mixture_weights_mode, "fixed_from_mashr"))
 stopifnot(isTRUE(fit$metadata$extreme_deconvolution_used))
 RS
 
@@ -122,6 +123,7 @@ fit <- readRDS(args[[1L]])
 stopifnot(identical(fit$metadata$prior, "mashr"))
 stopifnot(identical(fit$metadata$mash_model_training_scope, "all_snps_in_window"))
 stopifnot(identical(fit$metadata$covariance_training_scope, "strong_snps_in_window"))
+stopifnot(identical(fit$metadata$prior_mixture_weights_mode, "fixed_from_mashr"))
 RS
 
 Rscript - "$tmp_dir/marginal_associations.tsv.gz" <<'RS'
