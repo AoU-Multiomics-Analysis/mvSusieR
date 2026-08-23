@@ -77,7 +77,30 @@ fit_window_mvsusie <- function(prepared, config) {
   }
   prior <- prior_details$prior
   fix_mashr_mixture_weights <- identical(config$prior_method, "mashr")
+  prior_scale_conversion <- "not_applicable"
+  prior_outcome_se_range <- c(NA_real_, NA_real_)
   if (fix_mashr_mixture_weights) {
+    raw_prior_diagonal <- unlist(lapply(prior$xUlist, diag), use.names = FALSE)
+    prior <- prepare_mashr_prior_for_mvsusie(prior, prepared$Y)
+    prior_outcome_se_range <- range(
+      attr(prior, "mvsusie_outcome_se_scale")
+    )
+    prepared_prior_diagonal <- unlist(
+      lapply(prior$xUlist, diag),
+      use.names = FALSE
+    )
+    prior_scale_conversion <- "preserve_mashr_effect_covariance"
+    pipeline_log(sprintf(
+      "Raw mashr prior diagonal range: %.6g to %.6g.",
+      min(raw_prior_diagonal), max(raw_prior_diagonal)
+    ))
+    pipeline_log(sprintf(
+      paste(
+        "Pre-scaled mashr prior diagonal range: %.6g to %.6g;",
+        "mvSuSiE standardization will restore the raw mashr scale."
+      ),
+      min(prepared_prior_diagonal), max(prepared_prior_diagonal)
+    ))
     pipeline_log("Using the fitted mashr mixture weights without re-estimation.")
   }
   if (!isTRUE(config$estimate_residual_variance)) {
@@ -134,6 +157,9 @@ fit_window_mvsusie <- function(prepared, config) {
       } else {
         "estimated_by_mvsusie"
       },
+      prior_scale_conversion = prior_scale_conversion,
+      prior_outcome_se_min = prior_outcome_se_range[[1L]],
+      prior_outcome_se_max = prior_outcome_se_range[[2L]],
       residual_variance_mode = if (config$estimate_residual_variance) {
         "estimated_by_mvsusie"
       } else {

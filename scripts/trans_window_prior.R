@@ -27,6 +27,29 @@ make_mashr_data <- function(Bhat, Shat) {
   mashr::mash_set_data(Bhat = Bhat, Shat = Shat, alpha = 0)
 }
 
+prepare_mashr_prior_for_mvsusie <- function(prior, Y) {
+  if (!inherits(prior, "mash_prior") || !length(prior$xUlist)) {
+    stop("prior must be a non-empty mash prior.", call. = FALSE)
+  }
+  if (!is.matrix(Y) || !is.numeric(Y) || ncol(Y) < 1L) {
+    stop("Y must be a numeric matrix with at least one outcome.", call. = FALSE)
+  }
+  outcome_n <- colSums(is.finite(Y))
+  outcome_sd <- apply(Y, 2L, stats::sd, na.rm = TRUE)
+  outcome_se <- outcome_sd / sqrt(outcome_n)
+  if (any(!is.finite(outcome_se)) || any(outcome_se <= 0)) {
+    stop("Each outcome must have a finite positive standard error scale.", call. = FALSE)
+  }
+  if (any(vapply(prior$xUlist, nrow, integer(1L)) != ncol(Y))) {
+    stop("Mash prior matrices must match the number of outcomes.", call. = FALSE)
+  }
+
+  automatic_scale <- tcrossprod(outcome_se)
+  prior$xUlist <- lapply(prior$xUlist, function(U) U / automatic_scale)
+  attr(prior, "mvsusie_outcome_se_scale") <- outcome_se
+  prior
+}
+
 compute_marginal_bhat_shat_matrix <- function(X, Y, block_size = 1000L) {
   if (!is.matrix(X) || !is.numeric(X) || !is.matrix(Y) || !is.numeric(Y)) {
     stop("X and Y must be numeric matrices.", call. = FALSE)

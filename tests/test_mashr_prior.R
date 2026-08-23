@@ -1,5 +1,33 @@
 source("scripts/trans_window_prior.R")
 
+stopifnot(exists("prepare_mashr_prior_for_mvsusie", mode = "function"))
+scale_test_prior <- mvsusieR::create_mixture_prior(
+  mixture_prior = list(
+    matrices = list(matrix(c(0.04, 0.03, 0.03, 0.09), 2L, 2L)),
+    weights = 1
+  ),
+  null_weight = 0
+)
+scale_test_Y <- cbind(c(-1, 0, 1), c(-2, 0, 2))
+scale_test_prepared <- prepare_mashr_prior_for_mvsusie(
+  scale_test_prior,
+  scale_test_Y
+)
+scale_test_expected <- matrix(c(0.12, 0.045, 0.045, 0.0675), 2L, 2L)
+stopifnot(isTRUE(all.equal(
+  scale_test_prepared$xUlist[[1L]],
+  scale_test_expected,
+  tolerance = 1e-12
+)))
+scale_test_sigma <- c(1 / sqrt(3), 2 / sqrt(3))
+scale_test_round_trip <-
+  t(scale_test_prepared$xUlist[[1L]] * scale_test_sigma) * scale_test_sigma
+stopifnot(isTRUE(all.equal(
+  scale_test_round_trip,
+  scale_test_prior$xUlist[[1L]],
+  tolerance = 1e-12
+)))
+
 set.seed(20260821)
 X <- sweep(matrix(rnorm(80L * 12L), nrow = 80L), 2L, seq_len(12L), "+")
 Y <- sweep(matrix(rnorm(80L * 4L), nrow = 80L), 2L, seq_len(4L), "+")
