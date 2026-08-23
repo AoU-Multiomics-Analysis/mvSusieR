@@ -12,6 +12,7 @@ make_model_config <- function(
   mashr_seed = NULL,
   mashr_strong_lfsr = 0.05,
   mashr_use_ed = TRUE,
+  estimate_residual_variance = TRUE,
   marginal_output = NULL
 ) {
   if (!prior_method %in% c("canonical", "mashr")) {
@@ -29,6 +30,7 @@ make_model_config <- function(
     mashr_seed = mashr_seed,
     mashr_strong_lfsr = as.numeric(mashr_strong_lfsr),
     mashr_use_ed = isTRUE(mashr_use_ed),
+    estimate_residual_variance = isTRUE(estimate_residual_variance),
     marginal_output = marginal_output
   )
 }
@@ -78,6 +80,9 @@ fit_window_mvsusie <- function(prepared, config) {
   if (fix_mashr_mixture_weights) {
     pipeline_log("Using the fitted mashr mixture weights without re-estimation.")
   }
+  if (!isTRUE(config$estimate_residual_variance)) {
+    pipeline_log("Using the initial residual covariance without re-estimation.")
+  }
   pipeline_log("Starting mvSuSiE with verbose iteration output.")
   fit <- mvsusieR::mvsusie(
     X = prepared$X,
@@ -87,7 +92,7 @@ fit_window_mvsusie <- function(prepared, config) {
     residual_variance = NULL,
     standardize = TRUE,
     intercept = FALSE,
-    estimate_residual_variance = TRUE,
+    estimate_residual_variance = config$estimate_residual_variance,
     estimate_prior_variance = FALSE,
     estimate_prior_mixture_weights = !fix_mashr_mixture_weights,
     coverage = config$coverage,
@@ -129,7 +134,11 @@ fit_window_mvsusie <- function(prepared, config) {
       } else {
         "estimated_by_mvsusie"
       },
-      residual_variance_mode = "mvsusieR_default",
+      residual_variance_mode = if (config$estimate_residual_variance) {
+        "estimated_by_mvsusie"
+      } else {
+        "fixed_initial_covariance"
+      },
       mvsusieR_version = as.character(utils::packageVersion("mvsusieR")),
       config = config,
       converged = isTRUE(fit$converged),

@@ -197,7 +197,7 @@ stopifnot(inherits(prior, "mash_prior"))
 
 result <- fit_window_mvsusie(model_prepared, config)
 stopifnot(isTRUE(result$fit$converged))
-stopifnot(identical(result$metadata$residual_variance_mode, "mvsusieR_default"))
+stopifnot(identical(result$metadata$residual_variance_mode, "estimated_by_mvsusie"))
 
 pip <- extract_variant_pips(result$fit, model_prepared)
 stopifnot(all(c("variant_id", "pip") %in% names(pip)))

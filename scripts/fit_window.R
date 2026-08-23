@@ -18,6 +18,11 @@ args <- parse_cli_args(
     optparse::make_option("--mashr-seed", type = "integer", default = NULL),
     optparse::make_option("--mashr-strong-lfsr", type = "double", default = 0.05),
     optparse::make_option("--mashr-skip-ed", action = "store_true", default = FALSE),
+    optparse::make_option(
+      "--fix-residual-variance",
+      action = "store_true",
+      default = FALSE
+    ),
     optparse::make_option("--marginal-output", type = "character", default = NULL),
     optparse::make_option("--output", type = "character")
   ),
@@ -43,6 +48,7 @@ config <- make_model_config(
   mashr_seed = mashr_seed,
   mashr_strong_lfsr = as_cli_numeric(args, "mashr_strong_lfsr", 0.05),
   mashr_use_ed = !isTRUE(args$mashr_skip_ed),
+  estimate_residual_variance = !isTRUE(args$fix_residual_variance),
   marginal_output = optional_cli_arg(args, "marginal_output")
 )
 result <- fit_window_mvsusie(prepared, config)

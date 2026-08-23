@@ -20,6 +20,7 @@ workflow TransWindowMvSusie {
     Int mashr_n_pca = 5
     Float mashr_strong_lfsr = 0.05
     Boolean mashr_use_ed = true
+    Boolean estimate_residual_variance = true
     Int? mashr_seed
   }
 
@@ -51,6 +52,7 @@ workflow TransWindowMvSusie {
         mashr_n_pca = mashr_n_pca,
         mashr_strong_lfsr = mashr_strong_lfsr,
         mashr_use_ed = mashr_use_ed,
+        estimate_residual_variance = estimate_residual_variance,
         mashr_seed = mashr_seed
     }
 
@@ -105,6 +107,7 @@ task RunMvSusie {
     Int mashr_n_pca
     Float mashr_strong_lfsr
     Boolean mashr_use_ed
+    Boolean estimate_residual_variance
     Int? mashr_seed
   }
 
@@ -132,6 +135,7 @@ task RunMvSusie {
       --mashr-n-pca ~{mashr_n_pca} \
       --mashr-strong-lfsr ~{mashr_strong_lfsr} \
       ~{if mashr_use_ed then "" else "--mashr-skip-ed"} \
+      ~{if estimate_residual_variance then "" else "--fix-residual-variance"} \
       ~{if defined(mashr_seed) then "--mashr-seed " + select_first([mashr_seed]) else ""} \
       --prepared-output prepared_window.rds \
       --fit-output mvsusie_fit.rds
