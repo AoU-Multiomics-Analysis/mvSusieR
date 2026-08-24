@@ -154,18 +154,102 @@ stopifnot(grepl(
   fixed = TRUE
 ))
 
-# Keep the existing preprocessing tests isolated from the sample-order fix in Task 3.
-covariates_by_modality <- lapply(covariates_by_modality, function(matrix) {
-  matrix[dosage$sample_ids, , drop = FALSE]
-})
-covariates <- covariates_by_modality$expression
-
+source("scripts/trans_window_logging.R")
 source("scripts/trans_window_preprocess.R")
-prepared <- prepare_window_data(
+
+raw_covariates_by_modality <- covariates_by_modality
+genotype_union <- make_genotype_covariates(
+  raw_covariates_by_modality,
+  samples = dosage$sample_ids
+)
+stopifnot(identical(
+  colnames(genotype_union$matrix),
+  c("expression::PC1", "SHARED", "splicing::PC1", "protein::PC1")
+))
+stopifnot(nrow(genotype_union$provenance) == 6L)
+stopifnot(sum(genotype_union$provenance$final_name == "SHARED") == 3L)
+stopifnot(length(unique(
+  genotype_union$provenance$deduplicated_to[
+    genotype_union$provenance$original_name == "SHARED"
+  ]
+)) == 1L)
+
+incomplete_covariates <- lapply(raw_covariates_by_modality, function(matrix) {
+  matrix[, "PC1", drop = FALSE]
+})
+incomplete_covariates$expression["1", "PC1"] <- NA_real_
+
+phenotype_with_constant <- phenotype_data
+constant_key <- "expression::constant"
+phenotype_with_constant$Y <- cbind(
+  phenotype_data$Y[, 1L, drop = FALSE],
+  rep(1, nrow(phenotype_data$Y)),
+  phenotype_data$Y[, 2:3, drop = FALSE]
+)
+colnames(phenotype_with_constant$Y) <- c(
+  phenotype_data$phenotype_ids[[1L]],
+  constant_key,
+  phenotype_data$phenotype_ids[2:3]
+)
+phenotype_with_constant$Y["1", 1L] <- NA_real_
+constant_metadata <- data.table::copy(phenotype_data$metadata[1L])
+constant_metadata[, `:=`(
+  outcome_key = constant_key,
+  phenotype_id = "constant",
+  modality = "expression"
+)]
+phenotype_with_constant$metadata <- rbindlist(list(
+  phenotype_data$metadata[1L],
+  constant_metadata,
+  phenotype_data$metadata[2:3]
+))
+phenotype_with_constant$phenotype_ids <- colnames(phenotype_with_constant$Y)
+phenotype_with_constant$modalities <- c(
+  "expression", "expression", "splicing", "protein"
+)
+
+prepared_joint <- prepare_joint_window_data(
+  window = windows[1L],
+  phenotype_data = phenotype_with_constant,
+  dosage = dosage,
+  covariates_by_modality = incomplete_covariates
+)
+stopifnot(identical(prepared_joint$samples, as.character(2:6)))
+stopifnot(identical(
+  as.character(prepared_joint$phenotype_metadata$modality),
+  c("expression", "splicing", "protein")
+))
+stopifnot(identical(
+  colnames(prepared_joint$Y),
+  prepared_joint$phenotype_metadata$outcome_key
+))
+stopifnot(max(abs(apply(prepared_joint$Y, 2L, sd) - 1)) < 1e-10)
+stopifnot(!all(abs(apply(prepared_joint$X, 2L, sd) - 1) < 1e-8))
+
+for (modality in required_joint_modalities()) {
+  indices <- which(prepared_joint$phenotype_metadata$modality == modality)
+  model <- cbind(
+    incomplete_covariates[[modality]][prepared_joint$samples, , drop = FALSE],
+    intercept = 1
+  )
+  stopifnot(max(abs(crossprod(
+    model,
+    prepared_joint$Y[, indices, drop = FALSE]
+  ))) < 1e-6)
+}
+genotype_model <- cbind(prepared_joint$genotype_covariates, intercept = 1)
+stopifnot(max(abs(crossprod(genotype_model, prepared_joint$X))) < 1e-6)
+stopifnot(identical(
+  colnames(prepared_joint$genotype_covariates),
+  c("expression::PC1", "splicing::PC1", "protein::PC1")
+))
+stopifnot(nrow(prepared_joint$covariate_provenance) == 3L)
+
+prepared <- prepare_joint_window_data(
   window = windows[1],
   phenotype_data = phenotype_data,
   dosage = dosage,
-  covariates = covariates
+  covariates_by_modality = raw_covariates_by_modality
 )
 stopifnot(nrow(prepared$X) == length(prepared$samples))
 stopifnot(nrow(prepared$Y) == length(prepared$samples))
@@ -174,27 +258,19 @@ stopifnot(prepared$covariate_rank >= 1L)
 stopifnot("modality" %in% names(phenotype_data$metadata))
 stopifnot("modality" %in% names(prepared$phenotype_metadata))
 
-prepared_modality <- prepare_window_data(
-  window = windows[1],
-  phenotype_data = phenotype_data,
-  dosage = dosage,
-  covariates_by_modality = covariates_by_modality
-)
-genotype_covariates <- make_genotype_covariates(
-  lapply(covariates_by_modality, function(matrix) {
-    matrix[prepared_modality$samples, , drop = FALSE]
-  })
-)
-genotype_model <- cbind(genotype_covariates, intercept = 1)
-stopifnot(abs(max(abs(crossprod(genotype_model, prepared_modality$X)))) < 1e-6)
-for (modality in unique(prepared_modality$phenotype_metadata$modality)) {
-  phenotype_indices <- which(prepared_modality$phenotype_metadata$modality == modality)
+genotype_model <- cbind(prepared$genotype_covariates, intercept = 1)
+stopifnot(abs(max(abs(crossprod(genotype_model, prepared$X)))) < 1e-6)
+for (modality in unique(prepared$phenotype_metadata$modality)) {
+  phenotype_indices <- which(prepared$phenotype_metadata$modality == modality)
   phenotype_model <- cbind(
-    covariates_by_modality[[modality]][prepared_modality$samples, , drop = FALSE],
+    raw_covariates_by_modality[[modality]][prepared$samples, , drop = FALSE],
     intercept = 1
   )
   stopifnot(
-    abs(max(abs(crossprod(phenotype_model, prepared_modality$Y[, phenotype_indices, drop = FALSE])))) < 1e-6
+    abs(max(abs(crossprod(
+      phenotype_model,
+      prepared$Y[, phenotype_indices, drop = FALSE]
+    )))) < 1e-6
   )
 }
 
@@ -207,7 +283,7 @@ conflicting_modality_covariates <- list(
   splicing = splicing_pc,
   protein = expression_pc
 )
-prepared_conflicting_names <- prepare_window_data(
+prepared_conflicting_names <- prepare_joint_window_data(
   window = windows[1],
   phenotype_data = phenotype_data,
   dosage = dosage,
@@ -216,23 +292,28 @@ prepared_conflicting_names <- prepare_window_data(
 stopifnot(ncol(prepared_conflicting_names$X) == ncol(dosage$X))
 stopifnot(all(is.finite(prepared_conflicting_names$X)))
 genotype_conflicting_names <- make_genotype_covariates(
-  conflicting_modality_covariates
+  conflicting_modality_covariates,
+  samples = dosage$sample_ids
 )
 stopifnot(all(c(
   "expression::PC1",
-  "splicing::PC1",
-  "protein::PC1"
-) %in% colnames(genotype_conflicting_names)))
+  "splicing::PC1"
+) %in% colnames(genotype_conflicting_names$matrix)))
+stopifnot(!"protein::PC1" %in% colnames(genotype_conflicting_names$matrix))
 stopifnot(identical(
-  unname(genotype_conflicting_names[, "expression::PC1"]),
+  unname(genotype_conflicting_names$matrix[, "expression::PC1"]),
   as.numeric(expression_pc[, "PC1"])
 ))
 stopifnot(identical(
-  unname(genotype_conflicting_names[, "splicing::PC1"]),
+  unname(genotype_conflicting_names$matrix[, "splicing::PC1"]),
   as.numeric(splicing_pc[, "PC1"])
 ))
 conflicting_genotype_model <- cbind(
-  genotype_conflicting_names[prepared_conflicting_names$samples, , drop = FALSE],
+  genotype_conflicting_names$matrix[
+    prepared_conflicting_names$samples,
+    ,
+    drop = FALSE
+  ],
   intercept = 1
 )
 stopifnot(
@@ -242,14 +323,17 @@ stopifnot(
   ))) < 1e-6
 )
 
-bad_covariates <- covariates
-rownames(bad_covariates) <- paste0("missing_", seq_len(nrow(bad_covariates)))
+bad_covariates <- lapply(raw_covariates_by_modality, identity)
+rownames(bad_covariates$protein) <- paste0(
+  "missing_",
+  seq_len(nrow(bad_covariates$protein))
+)
 no_shared_samples <- tryCatch(
-  prepare_window_data(
+  prepare_joint_window_data(
     window = windows[1],
     phenotype_data = phenotype_data,
     dosage = dosage,
-    covariates = bad_covariates
+    covariates_by_modality = bad_covariates
   ),
   error = identity
 )
@@ -263,11 +347,11 @@ constant_dosage$metadata <- data.table::rbindlist(list(
   dosage$metadata,
   data.table::data.table(CHROM = "chr1", POS = 303L, REF = "G", ALT = "A")
 ))
-filtered <- prepare_window_data(
+filtered <- prepare_joint_window_data(
   window = windows[1],
   phenotype_data = phenotype_data,
   dosage = constant_dosage,
-  covariates = covariates
+  covariates_by_modality = raw_covariates_by_modality
 )
 stopifnot(filtered$qc$excluded_variants == 1L)
 stopifnot(ncol(filtered$X) == 2L)

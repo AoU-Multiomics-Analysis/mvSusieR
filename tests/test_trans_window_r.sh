@@ -31,6 +31,7 @@ Rscript scripts/prepare_window.R \
   --expression-covariates "$input_dir/model_expression_covariates.tsv" \
   --splicing-covariates "$input_dir/model_splicing_covariates.tsv" \
   --protein-covariates "$input_dir/model_protein_covariates.tsv" \
+  --covariate-provenance-output "$tmp_dir/standalone_covariate_provenance.tsv.gz" \
   --output "$tmp_dir/standalone_prepared_window.rds" \
   2>&1 | tee "$tmp_dir/prepare_window.log"
 
@@ -61,6 +62,7 @@ for invalid_step in 0 2.5 5; do
     --expression-covariates "$input_dir/model_expression_covariates.tsv" \
     --splicing-covariates "$input_dir/model_splicing_covariates.tsv" \
     --protein-covariates "$input_dir/model_protein_covariates.tsv" \
+    --covariate-provenance-output "$tmp_dir/invalid_${invalid_label}_provenance.tsv.gz" \
     --L 4 \
     --L-greedy "$invalid_step" \
     --prepared-output "$tmp_dir/invalid_${invalid_label}_prepared.rds" \
@@ -82,6 +84,7 @@ Rscript scripts/run_window_mvsusie.R \
   --expression-covariates "$input_dir/model_expression_covariates.tsv" \
   --splicing-covariates "$input_dir/model_splicing_covariates.tsv" \
   --protein-covariates "$input_dir/model_protein_covariates.tsv" \
+  --covariate-provenance-output "$tmp_dir/covariate_provenance.tsv.gz" \
   --L 4 \
   --L-greedy 2 \
   --greedy-lbf-cutoff 1000000 \
@@ -131,6 +134,8 @@ Rscript scripts/merge_window_outputs.R \
 
 for output in \
   "$tmp_dir/prepared_window.rds" \
+  "$tmp_dir/standalone_covariate_provenance.tsv.gz" \
+  "$tmp_dir/covariate_provenance.tsv.gz" \
   "$tmp_dir/mvsusie_fit.rds" \
   "$tmp_dir/resumed_mvsusie_fit.rds" \
   "$tmp_dir/marginal_associations.tsv.gz" \
@@ -144,6 +149,15 @@ for output in \
   "$tmp_dir/merged/window_qc.tsv"; do
   test -s "$output"
 done
+
+Rscript - "$tmp_dir/prepared_window.rds" <<'RS'
+args <- commandArgs(trailingOnly = TRUE)
+prepared <- readRDS(args[[1L]])
+stopifnot(inherits(prepared$input_checksums, "data.frame"))
+stopifnot(nrow(prepared$input_checksums) == 9L)
+stopifnot(all(nzchar(prepared$input_checksums$md5)))
+stopifnot(nrow(prepared$covariate_provenance) == 6L)
+RS
 
 Rscript - "$tmp_dir/window/window_qc.tsv" <<'RS'
 args <- commandArgs(trailingOnly = TRUE)

@@ -16,9 +16,9 @@ args <- parse_cli_args(
     optparse::make_option("--splicing-covariates", type = "character"),
     optparse::make_option("--protein-covariates", type = "character"),
     optparse::make_option("--keep-samples", type = "character", default = NULL),
-    optparse::make_option("--min-nonzero-fraction", type = "double", default = NULL),
     optparse::make_option("--min-genotype-variance", type = "double", default = 1e-8),
     optparse::make_option("--min-phenotype-variance", type = "double", default = 1e-8),
+    optparse::make_option("--covariate-provenance-output", type = "character"),
     optparse::make_option("--output", type = "character")
   ),
   description = "Prepare one trans-window mvSusie input bundle."
@@ -62,19 +62,28 @@ for (modality in names(covariates_by_modality)) {
   ))
 }
 
-min_nonzero_fraction <- optional_cli_arg(args, "min_nonzero_fraction")
-if (!is.null(min_nonzero_fraction)) min_nonzero_fraction <- as.numeric(min_nonzero_fraction)
 pipeline_log("Residualizing genotype and phenotype matrices.")
-prepared <- prepare_window_data(
+prepared <- prepare_joint_window_data(
   window = window,
   phenotype_data = phenotype_data,
   dosage = dosage,
   covariates_by_modality = covariates_by_modality,
   keep_samples = optional_cli_arg(args, "keep_samples"),
   min_genotype_variance = as_cli_numeric(args, "min_genotype_variance", 1e-8),
-  min_phenotype_variance = as_cli_numeric(args, "min_phenotype_variance", 1e-8),
-  min_nonzero_fraction = min_nonzero_fraction
+  min_phenotype_variance = as_cli_numeric(args, "min_phenotype_variance", 1e-8)
 )
+prepared$input_checksums <- input_file_checksums(c(
+  windows = require_cli_arg(args, "windows"),
+  window_phenotypes = require_cli_arg(args, "window_phenotypes"),
+  dosage = require_cli_arg(args, "dosage"),
+  stats::setNames(
+    phenotype_files,
+    paste0("phenotype_file_", seq_along(phenotype_files))
+  ),
+  expression_covariates = require_cli_arg(args, "expression_covariates"),
+  splicing_covariates = require_cli_arg(args, "splicing_covariates"),
+  protein_covariates = require_cli_arg(args, "protein_covariates")
+))
 pipeline_log(sprintf(
   "Preprocessing complete: %d samples, %d variants, and %d outcomes retained.",
   nrow(prepared$X), ncol(prepared$X), ncol(prepared$Y)
@@ -82,4 +91,9 @@ pipeline_log(sprintf(
 
 pipeline_log("Saving prepared window data.")
 save_rds_checked(prepared, require_cli_arg(args, "output"))
+pipeline_log("Writing covariate provenance.")
+write_covariate_provenance(
+  prepared$covariate_provenance,
+  require_cli_arg(args, "covariate_provenance_output")
+)
 pipeline_log("Prepared window data saved.")
