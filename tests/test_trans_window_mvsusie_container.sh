@@ -16,6 +16,9 @@ rg -q 'mashr' "$dockerfile"
 rg -q 'install_url' "$dockerfile"
 rg -q 'mvsusieR.*0[.]3[.]0' "$workflow"
 rg -q 'susieR.*0[.]15[.]54' "$workflow"
+rg -q 'formals[(]mvsusieR::mvsusie[)]' "$workflow"
+rg -q 'L_greedy' "$workflow"
+rg -q 'greedy_lbf_cutoff' "$workflow"
 
 for script in \
   trans_window_io.R \

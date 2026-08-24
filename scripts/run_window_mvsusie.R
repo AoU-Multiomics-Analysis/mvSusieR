@@ -20,6 +20,12 @@ args <- parse_cli_args(
     optparse::make_option("--min-genotype-variance", type = "double", default = 1e-8),
     optparse::make_option("--min-phenotype-variance", type = "double", default = 1e-8),
     optparse::make_option("--L", type = "integer", default = 10L),
+    optparse::make_option("--L-greedy", type = "double", default = NULL),
+    optparse::make_option(
+      "--greedy-lbf-cutoff",
+      type = "double",
+      default = 0.1
+    ),
     optparse::make_option("--max-iter", type = "integer", default = 100L),
     optparse::make_option("--tol", type = "double", default = 1e-4),
     optparse::make_option("--coverage", type = "double", default = 0.95),
@@ -80,6 +86,8 @@ min_nonzero_fraction <- optional_cli_arg(args, "min_nonzero_fraction")
 if (!is.null(min_nonzero_fraction)) min_nonzero_fraction <- as.numeric(min_nonzero_fraction)
 mashr_seed <- optional_cli_arg(args, "mashr_seed")
 if (!is.null(mashr_seed)) mashr_seed <- as_cli_integer(args, "mashr_seed", 0L)
+L_greedy <- optional_cli_arg(args, "L_greedy")
+if (!is.null(L_greedy)) L_greedy <- as_cli_numeric(args, "L_greedy", 0)
 pipeline_log("Residualizing genotype and phenotype matrices.")
 prepared <- prepare_window_data(
   window = window,
@@ -101,6 +109,8 @@ pipeline_log("Prepared window data saved.")
 
 config <- make_model_config(
   L = as_cli_integer(args, "L", 10L),
+  L_greedy = L_greedy,
+  greedy_lbf_cutoff = as_cli_numeric(args, "greedy_lbf_cutoff", 0.1),
   max_iter = as_cli_integer(args, "max_iter", 100L),
   tol = as_cli_numeric(args, "tol", 1e-4),
   coverage = as_cli_numeric(args, "coverage", 0.95),

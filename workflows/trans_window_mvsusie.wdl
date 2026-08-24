@@ -9,6 +9,8 @@ workflow TransWindowMvSusie {
     Array[String] covariate_modalities = ["shared"]
     File? keep_samples
     Int L = 10
+    Int? L_greedy
+    Float greedy_lbf_cutoff = 0.1
     Int max_iter = 100
     Float tol = 1e-4
     Float coverage = 0.95
@@ -43,6 +45,8 @@ workflow TransWindowMvSusie {
         min_genotype_variance = min_genotype_variance,
         min_phenotype_variance = min_phenotype_variance,
         L = L,
+        L_greedy = L_greedy,
+        greedy_lbf_cutoff = greedy_lbf_cutoff,
         max_iter = max_iter,
         tol = tol,
         coverage = coverage,
@@ -98,6 +102,8 @@ task RunMvSusie {
     Float min_genotype_variance
     Float min_phenotype_variance
     Int L
+    Int? L_greedy
+    Float greedy_lbf_cutoff
     Int max_iter
     Float tol
     Float coverage
@@ -114,6 +120,12 @@ task RunMvSusie {
   command <<<
     set -euo pipefail
 
+    log() {
+      printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
+    }
+
+    log "Starting RunMvSusie for ~{window_id}: L_max=~{L}, L_greedy=~{default="fixed" L_greedy}, greedy_lbf_cutoff=~{greedy_lbf_cutoff}"
+
     Rscript /opt/mvsusie/scripts/run_window_mvsusie.R \
       --windows ~{windows_tsv} \
       --window-phenotypes ~{window_phenotypes_tsv} \
@@ -126,6 +138,8 @@ task RunMvSusie {
       --min-genotype-variance ~{min_genotype_variance} \
       --min-phenotype-variance ~{min_phenotype_variance} \
       --L ~{L} \
+      ~{if defined(L_greedy) then "--L-greedy " + select_first([L_greedy]) else ""} \
+      --greedy-lbf-cutoff ~{greedy_lbf_cutoff} \
       --max-iter ~{max_iter} \
       --tol ~{tol} \
       --coverage ~{coverage} \
@@ -139,6 +153,8 @@ task RunMvSusie {
       ~{if defined(mashr_seed) then "--mashr-seed " + select_first([mashr_seed]) else ""} \
       --prepared-output prepared_window.rds \
       --fit-output mvsusie_fit.rds
+
+    log "Completed RunMvSusie for ~{window_id}"
   >>>
 
   output {
@@ -162,12 +178,20 @@ task SummarizeMvSusie {
 
   command <<<
     set -euo pipefail
+
+    log() {
+      printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
+    }
+
+    log "Starting SummarizeMvSusie"
     mkdir -p window_outputs
 
     Rscript /opt/mvsusie/scripts/summarize_window.R \
       --prepared ~{prepared_window} \
       --fit ~{mvsusie_fit} \
       --output-dir window_outputs
+
+    log "Completed SummarizeMvSusie"
   >>>
 
   output {
@@ -195,6 +219,12 @@ task MergeWindowOutputs {
 
   command <<<
     set -euo pipefail
+
+    log() {
+      printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
+    }
+
+    log "Starting MergeWindowOutputs"
     mkdir -p merged
 
     Rscript /opt/mvsusie/scripts/merge_window_outputs.R \
@@ -203,6 +233,8 @@ task MergeWindowOutputs {
       --component-effects "~{sep="," component_effects}" \
       --window-qc "~{sep="," window_qc}" \
       --output-dir merged
+
+    log "Completed MergeWindowOutputs"
   >>>
 
   output {

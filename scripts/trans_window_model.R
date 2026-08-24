@@ -2,6 +2,8 @@ source("scripts/trans_window_logging.R")
 
 make_model_config <- function(
   L = 10L,
+  L_greedy = NULL,
+  greedy_lbf_cutoff = 0.1,
   max_iter = 100L,
   tol = 1e-4,
   coverage = 0.95,
@@ -18,8 +20,25 @@ make_model_config <- function(
   if (!prior_method %in% c("canonical", "mashr")) {
     stop("prior_method must be either canonical or mashr.", call. = FALSE)
   }
+  if (!is.null(L_greedy)) {
+    if (
+      length(L_greedy) != 1L || !is.numeric(L_greedy) || is.na(L_greedy) ||
+      !is.finite(L_greedy) || L_greedy != floor(L_greedy) ||
+      L_greedy < 1L || L_greedy > L
+    ) {
+      stop("L_greedy must be an integer from one through L.", call. = FALSE)
+    }
+  }
+  if (
+    length(greedy_lbf_cutoff) != 1L || is.na(greedy_lbf_cutoff) ||
+    !is.finite(greedy_lbf_cutoff)
+  ) {
+    stop("greedy_lbf_cutoff must be one finite number.", call. = FALSE)
+  }
   list(
     L = as.integer(L),
+    L_greedy = if (is.null(L_greedy)) NULL else as.integer(L_greedy),
+    greedy_lbf_cutoff = as.numeric(greedy_lbf_cutoff),
     max_iter = as.integer(max_iter),
     tol = as.numeric(tol),
     coverage = as.numeric(coverage),
@@ -106,11 +125,19 @@ fit_window_mvsusie <- function(prepared, config) {
   if (!isTRUE(config$estimate_residual_variance)) {
     pipeline_log("Using the initial residual covariance without re-estimation.")
   }
+  if (!is.null(config$L_greedy)) {
+    pipeline_log(sprintf(
+      "Using greedy L with step %d, maximum %d, and lbf cutoff %.6g.",
+      config$L_greedy, config$L, config$greedy_lbf_cutoff
+    ))
+  }
   pipeline_log("Starting mvSuSiE with verbose iteration output.")
   fit <- mvsusieR::mvsusie(
     X = prepared$X,
     Y = prepared$Y,
     L = config$L,
+    L_greedy = config$L_greedy,
+    greedy_lbf_cutoff = config$greedy_lbf_cutoff,
     prior_variance = prior,
     residual_variance = NULL,
     standardize = TRUE,
@@ -167,6 +194,8 @@ fit_window_mvsusie <- function(prepared, config) {
       },
       mvsusieR_version = as.character(utils::packageVersion("mvsusieR")),
       config = config,
+      L_final = as.integer(nrow(fit$alpha)),
+      L_greedy_used = !is.null(config$L_greedy),
       converged = isTRUE(fit$converged),
       niter = fit$niter
     )

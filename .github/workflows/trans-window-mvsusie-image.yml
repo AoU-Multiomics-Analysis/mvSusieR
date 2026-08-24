@@ -66,6 +66,11 @@ jobs:
             stopifnot(requireNamespace("mashr", quietly = TRUE))
             stopifnot(packageVersion("mvsusieR") >= "0.3.0")
             stopifnot(packageVersion("susieR") >= "0.15.54")
+            mvsusie_arguments <- names(formals(mvsusieR::mvsusie))
+            stopifnot(all(c(
+              "L_greedy",
+              "greedy_lbf_cutoff"
+            ) %in% mvsusie_arguments))
             scripts <- c(
               "trans_window_io.R",
               "trans_window_logging.R",

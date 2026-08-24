@@ -199,6 +199,35 @@ result <- fit_window_mvsusie(model_prepared, config)
 stopifnot(isTRUE(result$fit$converged))
 stopifnot(identical(result$metadata$residual_variance_mode, "estimated_by_mvsusie"))
 
+greedy_config <- make_model_config(
+  L = 4L,
+  L_greedy = 2L,
+  greedy_lbf_cutoff = 1e6
+)
+greedy_result <- fit_window_mvsusie(model_prepared, greedy_config)
+stopifnot(isTRUE(greedy_result$fit$converged))
+stopifnot(nrow(greedy_result$fit$alpha) == 2L)
+stopifnot(identical(greedy_result$metadata$config$L_greedy, 2L))
+stopifnot(identical(greedy_result$metadata$config$greedy_lbf_cutoff, 1e6))
+stopifnot(identical(greedy_result$metadata$L_final, 2L))
+stopifnot(isTRUE(greedy_result$metadata$L_greedy_used))
+
+for (invalid_step in list(0, 2.5, 5, Inf, NaN)) {
+  invalid_greedy_config <- tryCatch(
+    make_model_config(L = 4L, L_greedy = invalid_step),
+    error = identity
+  )
+  stopifnot(inherits(invalid_greedy_config, "error"))
+}
+
+for (invalid_cutoff in list(Inf, NaN)) {
+  invalid_greedy_config <- tryCatch(
+    make_model_config(L = 4L, L_greedy = 2L, greedy_lbf_cutoff = invalid_cutoff),
+    error = identity
+  )
+  stopifnot(inherits(invalid_greedy_config, "error"))
+}
+
 pip <- extract_variant_pips(result$fit, model_prepared)
 stopifnot(all(c("variant_id", "pip") %in% names(pip)))
 credible_sets <- extract_credible_sets(result$fit, model_prepared, config)

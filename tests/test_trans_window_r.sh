@@ -36,6 +36,39 @@ grep -q 'Reading genotype data' "$tmp_dir/prepare_window.log"
 grep -q 'Residualizing genotype and phenotype matrices' "$tmp_dir/prepare_window.log"
 grep -q 'Prepared window data saved' "$tmp_dir/prepare_window.log"
 
+for invalid_step in 0 2.5 5; do
+  invalid_label="${invalid_step/./_}"
+  if Rscript scripts/fit_window.R \
+    --prepared "$tmp_dir/standalone_prepared_window.rds" \
+    --L 4 \
+    --L-greedy "$invalid_step" \
+    --output "$tmp_dir/invalid_${invalid_label}_fit.rds" \
+    >"$tmp_dir/invalid_${invalid_label}_fit.log" 2>&1; then
+    echo "fit_window.R accepted invalid greedy L step: $invalid_step." >&2
+    exit 1
+  fi
+  grep -q 'L_greedy must be an integer from one through L' \
+    "$tmp_dir/invalid_${invalid_label}_fit.log"
+
+  if Rscript scripts/run_window_mvsusie.R \
+    --windows "$input_dir/windows.tsv" \
+    --window-phenotypes "$input_dir/window_phenotypes.tsv" \
+    --window-id w1 \
+    --dosage "$input_dir/model_dosage.tsv" \
+    --phenotype-files "$input_dir/model_expression.tsv,$input_dir/model_splicing.tsv,$input_dir/model_isoform.tsv" \
+    --covariate-files "$input_dir/model_covariates.tsv" \
+    --L 4 \
+    --L-greedy "$invalid_step" \
+    --prepared-output "$tmp_dir/invalid_${invalid_label}_prepared.rds" \
+    --fit-output "$tmp_dir/invalid_${invalid_label}_run.rds" \
+    >"$tmp_dir/invalid_${invalid_label}_run.log" 2>&1; then
+    echo "run_window_mvsusie.R accepted invalid greedy L step: $invalid_step." >&2
+    exit 1
+  fi
+  grep -q 'L_greedy must be an integer from one through L' \
+    "$tmp_dir/invalid_${invalid_label}_run.log"
+done
+
 Rscript scripts/run_window_mvsusie.R \
   --windows "$input_dir/windows.tsv" \
   --window-phenotypes "$input_dir/window_phenotypes.tsv" \
@@ -43,6 +76,9 @@ Rscript scripts/run_window_mvsusie.R \
   --dosage "$input_dir/model_dosage.tsv" \
   --phenotype-files "$input_dir/model_expression.tsv,$input_dir/model_splicing.tsv,$input_dir/model_isoform.tsv" \
   --covariate-files "$input_dir/model_covariates.tsv" \
+  --L 4 \
+  --L-greedy 2 \
+  --greedy-lbf-cutoff 1000000 \
   --prior-method mashr \
   --mashr-n-pca 2 \
   --mashr-seed 1 \
@@ -54,9 +90,14 @@ grep -q 'Reading genotype data' "$tmp_dir/run_window.log"
 grep -q 'Residualizing genotype and phenotype matrices' "$tmp_dir/run_window.log"
 grep -q 'Computing the all-SNP cross-product' "$tmp_dir/run_window.log"
 grep -q 'Starting extreme deconvolution' "$tmp_dir/run_window.log"
+grep -q 'Using greedy L with step 2' "$tmp_dir/run_window.log"
+grep -q '\[L_greedy\].*final L=2' "$tmp_dir/run_window.log"
 
 Rscript scripts/fit_window.R \
   --prepared "$tmp_dir/prepared_window.rds" \
+  --L 4 \
+  --L-greedy 2 \
+  --greedy-lbf-cutoff 1000000 \
   --prior-method mashr \
   --mashr-n-pca 2 \
   --mashr-seed 1 \
@@ -105,7 +146,9 @@ expected <- list(
   window_id = "w1", input_samples = 50L, shared_samples = 50L,
   input_variants = 6L, retained_variants = 6L, excluded_variants = 0L,
   input_phenotypes = 3L, retained_phenotypes = 3L,
-  excluded_phenotypes = 0L, excluded_samples = 0L, covariate_rank = 4L
+  excluded_phenotypes = 0L, excluded_samples = 0L, covariate_rank = 4L,
+  L_max = 4L, L_greedy = 2L, greedy_lbf_cutoff = 1e6,
+  L_final = 2L, L_greedy_used = TRUE
 )
 for (column in names(expected)) stopifnot(identical(actual[[column]][[1L]], expected[[column]]))
 RS
@@ -118,6 +161,9 @@ stopifnot(identical(fit$metadata$mash_model_training_scope, "all_snps_in_window"
 stopifnot(identical(fit$metadata$covariance_training_scope, "strong_snps_in_window"))
 stopifnot(identical(fit$metadata$prior_mixture_weights_mode, "fixed_from_mashr"))
 stopifnot(isTRUE(fit$metadata$extreme_deconvolution_used))
+stopifnot(nrow(fit$fit$alpha) == 2L)
+stopifnot(identical(fit$metadata$L_final, 2L))
+stopifnot(isTRUE(fit$metadata$L_greedy_used))
 RS
 
 Rscript - \
@@ -133,6 +179,9 @@ stopifnot(identical(fit$metadata$prior_mixture_weights_mode, "fixed_from_mashr")
 stopifnot(!isTRUE(fit$metadata$extreme_deconvolution_used))
 stopifnot(identical(fit$metadata$covariance_input_method, "pca_only"))
 stopifnot(identical(fit$metadata$residual_variance_mode, "fixed_initial_covariance"))
+stopifnot(nrow(fit$fit$alpha) == 2L)
+stopifnot(identical(fit$metadata$config$L_greedy, 2L))
+stopifnot(identical(fit$metadata$config$greedy_lbf_cutoff, 1e6))
 stopifnot(isTRUE(all.equal(
   fit$fit$sigma2,
   stats::cov(prepared$Y),

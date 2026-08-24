@@ -34,8 +34,24 @@ The workflow produces variant PIP tables, credible sets, component-effect
 tables, and window-level QC, along with merged versions of those outputs. The
 default uses the canonical mvSuSiE prior. Set prior_method to mashr to learn a
 window-specific prior. This option calculates marginal effects for all retained
-SNPs in the window, obtains PCA covariance inputs from all SNPs, and refines
-them with mashr extreme deconvolution before fitting the mashr mixture.
+SNPs in the window. It obtains PCA covariance inputs from SNPs that pass the
+configured lfsr threshold. It can refine those inputs with extreme
+deconvolution. The mashr mixture fit uses all retained SNPs. The pipeline
+preserves the effect-covariance scale from mashr when it supplies the prior to
+mvSuSiE.
+
+By default, mvSuSiE fits the fixed number of components in `L`. To use greedy
+component selection, set `L_greedy` to a positive step size. In this mode, `L`
+is the maximum number of components. The model starts with
+`min(L_greedy, L)` components and adds `L_greedy` components after each round.
+Each larger round uses the preceding fitted model as `model_init`; it does not
+restart the model from an empty state. The iteration counter starts again at
+one for each round.
+It stops when the minimum component log Bayes factor is less than
+`greedy_lbf_cutoff`, or when it reaches `L`. The default cutoff is `0.1`.
+Leave `L_greedy` unset to keep fixed-L behavior. The verbose task log records
+each greedy round. Window QC records the maximum, step, cutoff, and final
+number of components.
 
 ## Inputs and execution
 
