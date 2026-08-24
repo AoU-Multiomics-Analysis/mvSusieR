@@ -16,6 +16,9 @@ rg -q 'mashr' "$dockerfile"
 rg -q 'ggplot2' "$dockerfile"
 rg -q 'ripgrep' "$dockerfile"
 rg -q 'install_github' "$dockerfile"
+for package in dplyr purrr readr stringr tibble; do
+  rg -q "    ${package}" "$dockerfile"
+done
 rg -q 'RemoteSha.*65f3586a865fb6748cb4f9df50510ac577706348' "$workflow"
 rg -q 'RemoteSha.*ebd1133953005fa70c6b338727b5fe9222e2a1c2' "$workflow"
 rg -q 'mvsusie_plot' "$workflow"

@@ -28,9 +28,14 @@ RUN apt-get update \
 
 RUN install2.r --error --skipinstalled --ncpus -1 \
     data.table \
+    dplyr \
     ggplot2 \
     optparse \
-    remotes
+    purrr \
+    readr \
+    remotes \
+    stringr \
+    tibble
 
 # Install exact source revisions. Do not install suggested documentation and test packages.
 RUN Rscript -e 'remotes::install_github("stephenslab/susieR@65f3586a865fb6748cb4f9df50510ac577706348", dependencies = c("Depends", "Imports", "LinkingTo"), upgrade = "never")' \
