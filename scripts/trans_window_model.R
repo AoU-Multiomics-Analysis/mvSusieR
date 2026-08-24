@@ -1,5 +1,9 @@
+source("scripts/trans_window_logging.R")
+
 make_model_config <- function(
   L = 10L,
+  L_greedy = NULL,
+  greedy_lbf_cutoff = 0.1,
   max_iter = 100L,
   tol = 1e-4,
   coverage = 0.95,
@@ -7,13 +11,34 @@ make_model_config <- function(
   n_thread = 1L,
   prior_method = "canonical",
   mashr_n_pca = 5L,
-  mashr_seed = NULL
+  mashr_seed = NULL,
+  mashr_strong_lfsr = 0.05,
+  mashr_use_ed = TRUE,
+  estimate_residual_variance = TRUE,
+  marginal_output = NULL
 ) {
   if (!prior_method %in% c("canonical", "mashr")) {
     stop("prior_method must be either canonical or mashr.", call. = FALSE)
   }
+  if (!is.null(L_greedy)) {
+    if (
+      length(L_greedy) != 1L || !is.numeric(L_greedy) || is.na(L_greedy) ||
+      !is.finite(L_greedy) || L_greedy != floor(L_greedy) ||
+      L_greedy < 1L || L_greedy > L
+    ) {
+      stop("L_greedy must be an integer from one through L.", call. = FALSE)
+    }
+  }
+  if (
+    length(greedy_lbf_cutoff) != 1L || is.na(greedy_lbf_cutoff) ||
+    !is.finite(greedy_lbf_cutoff)
+  ) {
+    stop("greedy_lbf_cutoff must be one finite number.", call. = FALSE)
+  }
   list(
     L = as.integer(L),
+    L_greedy = if (is.null(L_greedy)) NULL else as.integer(L_greedy),
+    greedy_lbf_cutoff = as.numeric(greedy_lbf_cutoff),
     max_iter = as.integer(max_iter),
     tol = as.numeric(tol),
     coverage = as.numeric(coverage),
@@ -21,7 +46,11 @@ make_model_config <- function(
     n_thread = as.integer(n_thread),
     prior_method = prior_method,
     mashr_n_pca = as.integer(mashr_n_pca),
-    mashr_seed = mashr_seed
+    mashr_seed = mashr_seed,
+    mashr_strong_lfsr = as.numeric(mashr_strong_lfsr),
+    mashr_use_ed = isTRUE(mashr_use_ed),
+    estimate_residual_variance = isTRUE(estimate_residual_variance),
+    marginal_output = marginal_output
   )
 }
 
@@ -37,19 +66,22 @@ fit_window_mvsusie <- function(prepared, config) {
     stop("Prepared genotype and phenotype matrices have different sample counts.", call. = FALSE)
   }
   prior_details <- if (identical(config$prior_method, "mashr")) {
-    if (!requireNamespace("susieR", quietly = TRUE)) {
-      stop("The susieR package is required to compute marginal effects.", call. = FALSE)
+    pipeline_log("Preparing all-SNP associations for mashr.")
+    marginal <- compute_marginal_bhat_shat_matrix(prepared$X, prepared$Y)
+    if (!is.null(config$marginal_output)) {
+      write_marginal_association_table(
+        marginal$Bhat,
+        marginal$Shat,
+        config$marginal_output
+      )
     }
-    standardized_x <- scale(prepared$X, center = TRUE, scale = TRUE)
-    marginal <- susieR::compute_marginal_bhat_shat(
-      X = standardized_x,
-      Y = prepared$Y
-    )
     learn_mashr_prior(
       Bhat = marginal$Bhat,
       Shat = marginal$Shat,
       n_pca = config$mashr_n_pca,
-      seed = config$mashr_seed
+      seed = config$mashr_seed,
+      strong_lfsr = config$mashr_strong_lfsr,
+      use_extreme_deconvolution = config$mashr_use_ed
     )
   } else {
     canonical_prior <- make_canonical_prior(ncol(prepared$Y))
@@ -63,16 +95,56 @@ fit_window_mvsusie <- function(prepared, config) {
     )
   }
   prior <- prior_details$prior
+  fix_mashr_mixture_weights <- identical(config$prior_method, "mashr")
+  prior_scale_conversion <- "not_applicable"
+  prior_outcome_se_range <- c(NA_real_, NA_real_)
+  if (fix_mashr_mixture_weights) {
+    raw_prior_diagonal <- unlist(lapply(prior$xUlist, diag), use.names = FALSE)
+    prior <- prepare_mashr_prior_for_mvsusie(prior, prepared$Y)
+    prior_outcome_se_range <- range(
+      attr(prior, "mvsusie_outcome_se_scale")
+    )
+    prepared_prior_diagonal <- unlist(
+      lapply(prior$xUlist, diag),
+      use.names = FALSE
+    )
+    prior_scale_conversion <- "preserve_mashr_effect_covariance"
+    pipeline_log(sprintf(
+      "Raw mashr prior diagonal range: %.6g to %.6g.",
+      min(raw_prior_diagonal), max(raw_prior_diagonal)
+    ))
+    pipeline_log(sprintf(
+      paste(
+        "Pre-scaled mashr prior diagonal range: %.6g to %.6g;",
+        "mvSuSiE standardization will restore the raw mashr scale."
+      ),
+      min(prepared_prior_diagonal), max(prepared_prior_diagonal)
+    ))
+    pipeline_log("Using the fitted mashr mixture weights without re-estimation.")
+  }
+  if (!isTRUE(config$estimate_residual_variance)) {
+    pipeline_log("Using the initial residual covariance without re-estimation.")
+  }
+  if (!is.null(config$L_greedy)) {
+    pipeline_log(sprintf(
+      "Using greedy L with step %d, maximum %d, and lbf cutoff %.6g.",
+      config$L_greedy, config$L, config$greedy_lbf_cutoff
+    ))
+  }
+  pipeline_log("Starting mvSuSiE with verbose iteration output.")
   fit <- mvsusieR::mvsusie(
     X = prepared$X,
     Y = prepared$Y,
     L = config$L,
+    L_greedy = config$L_greedy,
+    greedy_lbf_cutoff = config$greedy_lbf_cutoff,
     prior_variance = prior,
     residual_variance = NULL,
     standardize = TRUE,
     intercept = FALSE,
-    estimate_residual_variance = TRUE,
+    estimate_residual_variance = config$estimate_residual_variance,
     estimate_prior_variance = FALSE,
+    estimate_prior_mixture_weights = !fix_mashr_mixture_weights,
     coverage = config$coverage,
     min_abs_corr = config$min_abs_corr,
     precompute_cache = TRUE,
@@ -88,6 +160,7 @@ fit_window_mvsusie <- function(prepared, config) {
       call. = FALSE
     )
   }
+  pipeline_log(sprintf("mvSuSiE converged after %d iterations.", fit$niter))
   list(
     fit = fit,
     metadata = list(
@@ -95,12 +168,34 @@ fit_window_mvsusie <- function(prepared, config) {
       prior = config$prior_method,
       prior_components = prior_details$n_prior_components,
       prior_covariance_inputs = prior_details$n_covariance_inputs,
+      pca_covariance_inputs = prior_details$pca_covariance_inputs,
+      mash_model_training_scope = prior_details$mash_model_training_scope,
+      mash_model_training_n = prior_details$mash_model_training_n,
       covariance_training_scope = prior_details$covariance_training_scope,
       covariance_training_n = prior_details$covariance_training_n,
+      covariance_significant_n = prior_details$covariance_significant_n,
+      covariance_selection_lfsr = prior_details$covariance_selection_lfsr,
+      covariance_selection_fallback_used =
+        prior_details$covariance_selection_fallback_used,
       extreme_deconvolution_used = prior_details$extreme_deconvolution_used,
-      residual_variance_mode = "mvsusieR_default",
+      covariance_input_method = prior_details$covariance_input_method,
+      prior_mixture_weights_mode = if (fix_mashr_mixture_weights) {
+        "fixed_from_mashr"
+      } else {
+        "estimated_by_mvsusie"
+      },
+      prior_scale_conversion = prior_scale_conversion,
+      prior_outcome_se_min = prior_outcome_se_range[[1L]],
+      prior_outcome_se_max = prior_outcome_se_range[[2L]],
+      residual_variance_mode = if (config$estimate_residual_variance) {
+        "estimated_by_mvsusie"
+      } else {
+        "fixed_initial_covariance"
+      },
       mvsusieR_version = as.character(utils::packageVersion("mvsusieR")),
       config = config,
+      L_final = as.integer(nrow(fit$alpha)),
+      L_greedy_used = !is.null(config$L_greedy),
       converged = isTRUE(fit$converged),
       niter = fit$niter
     )

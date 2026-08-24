@@ -34,7 +34,26 @@ Rscript scripts/prepare_window.R \
 
 Rscript scripts/fit_window.R \
   --prepared "$work_dir/prepared.rds" \
+  --prior-method mashr \
+  --mashr-n-pca 3 \
+  --mashr-seed 20260822 \
   --output "$work_dir/fit.rds"
+
+Rscript - "$work_dir/fit.rds" <<'RS'
+args <- commandArgs(trailingOnly = TRUE)
+bundle <- readRDS(args[[1L]])
+stopifnot(identical(bundle$metadata$prior, "mashr"))
+stopifnot(identical(
+  bundle$metadata$mash_model_training_n,
+  bundle$qc$retained_variants
+))
+stopifnot(bundle$metadata$covariance_training_n <= bundle$qc$retained_variants)
+stopifnot(identical(
+  bundle$metadata$covariance_training_scope,
+  "strong_snps_in_window"
+))
+stopifnot(isTRUE(bundle$metadata$extreme_deconvolution_used))
+RS
 
 mkdir -p "$work_dir/window"
 Rscript scripts/summarize_window.R \

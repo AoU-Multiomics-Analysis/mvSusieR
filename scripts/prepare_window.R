@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 
 source("scripts/trans_window_io.R")
+source("scripts/trans_window_logging.R")
 source("scripts/trans_window_preprocess.R")
 source("scripts/trans_window_cli.R")
 
@@ -21,6 +22,7 @@ args <- parse_cli_args(
   ),
   description = "Prepare one trans-window mvSusie input bundle."
 )
+pipeline_log("Reading window and phenotype manifests.")
 windows <- read_windows_manifest(require_cli_arg(args, "windows"))
 phenotype_manifest <- read_window_phenotypes_manifest(
   require_cli_arg(args, "window_phenotypes")
@@ -36,8 +38,19 @@ covariate_files <- split_cli_paths(require_cli_arg(args, "covariate_files"))
 covariate_modalities <- split_cli_paths(
   optional_cli_arg(args, "covariate_modalities", "shared")
 )
+pipeline_log("Reading genotype data.")
 dosage <- read_wide_dosage(require_cli_arg(args, "dosage"))
+pipeline_log(sprintf(
+  "Genotype data loaded: %d samples and %d variants.",
+  nrow(dosage$X), ncol(dosage$X)
+))
+pipeline_log("Reading selected phenotype data.")
 phenotype_data <- read_window_phenotypes(window_id, phenotype_manifest, phenotype_files)
+pipeline_log(sprintf(
+  "Phenotype data loaded: %d samples and %d outcomes.",
+  nrow(phenotype_data$Y), ncol(phenotype_data$Y)
+))
+pipeline_log("Reading modality-specific covariates.")
 covariates_by_modality <- read_covariate_matrices(
   paths = covariate_files,
   modalities = covariate_modalities
@@ -45,6 +58,7 @@ covariates_by_modality <- read_covariate_matrices(
 
 min_nonzero_fraction <- optional_cli_arg(args, "min_nonzero_fraction")
 if (!is.null(min_nonzero_fraction)) min_nonzero_fraction <- as.numeric(min_nonzero_fraction)
+pipeline_log("Residualizing genotype and phenotype matrices.")
 prepared <- prepare_window_data(
   window = window,
   phenotype_data = phenotype_data,
@@ -55,5 +69,11 @@ prepared <- prepare_window_data(
   min_phenotype_variance = as_cli_numeric(args, "min_phenotype_variance", 1e-8),
   min_nonzero_fraction = min_nonzero_fraction
 )
+pipeline_log(sprintf(
+  "Preprocessing complete: %d samples, %d variants, and %d outcomes retained.",
+  nrow(prepared$X), ncol(prepared$X), ncol(prepared$Y)
+))
 
+pipeline_log("Saving prepared window data.")
 save_rds_checked(prepared, require_cli_arg(args, "output"))
+pipeline_log("Prepared window data saved.")

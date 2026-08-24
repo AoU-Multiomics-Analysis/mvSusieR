@@ -39,10 +39,12 @@ RUN Rscript -e 'remotes::install_url("https://github.com/stephenslab/susieR/arch
     && Rscript -e 'stopifnot(requireNamespace("mashr", quietly = TRUE), utils::packageVersion("mvsusieR") >= "0.3.0", utils::packageVersion("susieR") >= "0.15.54")'
 
 COPY scripts/trans_window_io.R \
+     scripts/trans_window_logging.R \
      scripts/trans_window_preprocess.R \
      scripts/trans_window_model.R \
      scripts/trans_window_prior.R \
      scripts/trans_window_cli.R \
+     scripts/fit_window.R \
      scripts/run_window_mvsusie.R \
      scripts/summarize_window.R \
      scripts/merge_window_outputs.R \

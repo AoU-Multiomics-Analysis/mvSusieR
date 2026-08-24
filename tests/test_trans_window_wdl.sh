@@ -11,9 +11,22 @@ rg -q 'covariate_modalities' workflows/trans_window_mvsusie.wdl
 rg -q 'sep="[,]" covariate_files' workflows/trans_window_mvsusie.wdl
 rg -q 'File phenotype_data' workflows/trans_window_mvsusie.wdl
 rg -q 'String prior_method = "canonical"' workflows/trans_window_mvsusie.wdl
+rg -q 'Int[?] L_greedy' workflows/trans_window_mvsusie.wdl
+rg -q 'Float greedy_lbf_cutoff = 0.1' workflows/trans_window_mvsusie.wdl
 rg -q 'Int mashr_n_pca = 5' workflows/trans_window_mvsusie.wdl
+rg -q 'Float mashr_strong_lfsr = 0.05' workflows/trans_window_mvsusie.wdl
+rg -q 'Boolean mashr_use_ed = true' workflows/trans_window_mvsusie.wdl
+rg -q 'Boolean estimate_residual_variance = true' workflows/trans_window_mvsusie.wdl
 rg -q -- '--prior-method' workflows/trans_window_mvsusie.wdl
+rg -q -- '--L-greedy' workflows/trans_window_mvsusie.wdl
+rg -q -- '--greedy-lbf-cutoff' workflows/trans_window_mvsusie.wdl
+rg -q 'log[(][)]' workflows/trans_window_mvsusie.wdl
+rg -q 'Starting RunMvSusie' workflows/trans_window_mvsusie.wdl
+rg -Fq 'L_greedy=~{default="fixed" L_greedy}' workflows/trans_window_mvsusie.wdl
 rg -q -- '--mashr-n-pca' workflows/trans_window_mvsusie.wdl
+rg -q -- '--mashr-strong-lfsr' workflows/trans_window_mvsusie.wdl
+rg -q -- '--mashr-skip-ed' workflows/trans_window_mvsusie.wdl
+rg -q -- '--fix-residual-variance' workflows/trans_window_mvsusie.wdl
 rg -q 'ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest' workflows/trans_window_mvsusie.wdl
 test "$(rg -c 'disks: "local-disk 500 SSD"' workflows/trans_window_mvsusie.wdl)" -eq 3
 test "$(rg -c 'memory: "16 GiB"' workflows/trans_window_mvsusie.wdl)" -eq 3

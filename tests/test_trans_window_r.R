@@ -31,6 +31,21 @@ covariates <- read_covariate_matrix(
 stopifnot(identical(dim(covariates), c(6L, 2L)))
 stopifnot(identical(rownames(covariates), as.character(1:6)))
 
+numeric_header_covariates_path <- tempfile(fileext = ".tsv")
+writeLines(
+  c(
+    "ID\t1001\t1002\t1003",
+    "PC1\t1\t2\t3",
+    "PC2\t4\t5\t6"
+  ),
+  numeric_header_covariates_path
+)
+numeric_header_covariates <- read_covariate_file(
+  numeric_header_covariates_path
+)
+stopifnot(identical(rownames(numeric_header_covariates), c("1001", "1002", "1003")))
+stopifnot(identical(colnames(numeric_header_covariates), c("PC1", "PC2")))
+
 covariates_by_modality <- read_covariate_matrices(
   paths = c(
     fixture("covariates.tsv"),
@@ -90,6 +105,50 @@ for (modality in unique(prepared_modality$phenotype_metadata$modality)) {
   )
 }
 
+expression_pc <- matrix(seq_len(6L), ncol = 1L,
+                        dimnames = list(as.character(1:6), "PC1"))
+splicing_pc <- matrix(rep(c(-1, 1), 3L), ncol = 1L,
+                      dimnames = list(as.character(1:6), "PC1"))
+conflicting_modality_covariates <- list(
+  expression = expression_pc,
+  splicing = splicing_pc,
+  isoform_usage = expression_pc
+)
+prepared_conflicting_names <- prepare_window_data(
+  window = windows[1],
+  phenotype_data = phenotype_data,
+  dosage = dosage,
+  covariates_by_modality = conflicting_modality_covariates
+)
+stopifnot(ncol(prepared_conflicting_names$X) == ncol(dosage$X))
+stopifnot(all(is.finite(prepared_conflicting_names$X)))
+genotype_conflicting_names <- make_genotype_covariates(
+  conflicting_modality_covariates
+)
+stopifnot(all(c(
+  "expression::PC1",
+  "splicing::PC1",
+  "isoform_usage::PC1"
+) %in% colnames(genotype_conflicting_names)))
+stopifnot(identical(
+  unname(genotype_conflicting_names[, "expression::PC1"]),
+  as.numeric(expression_pc[, "PC1"])
+))
+stopifnot(identical(
+  unname(genotype_conflicting_names[, "splicing::PC1"]),
+  as.numeric(splicing_pc[, "PC1"])
+))
+conflicting_genotype_model <- cbind(
+  genotype_conflicting_names[prepared_conflicting_names$samples, , drop = FALSE],
+  intercept = 1
+)
+stopifnot(
+  max(abs(crossprod(
+    conflicting_genotype_model,
+    prepared_conflicting_names$X
+  ))) < 1e-6
+)
+
 bad_covariates <- covariates
 rownames(bad_covariates) <- paste0("missing_", seq_len(nrow(bad_covariates)))
 no_shared_samples <- tryCatch(
@@ -138,7 +197,36 @@ stopifnot(inherits(prior, "mash_prior"))
 
 result <- fit_window_mvsusie(model_prepared, config)
 stopifnot(isTRUE(result$fit$converged))
-stopifnot(identical(result$metadata$residual_variance_mode, "mvsusieR_default"))
+stopifnot(identical(result$metadata$residual_variance_mode, "estimated_by_mvsusie"))
+
+greedy_config <- make_model_config(
+  L = 4L,
+  L_greedy = 2L,
+  greedy_lbf_cutoff = 1e6
+)
+greedy_result <- fit_window_mvsusie(model_prepared, greedy_config)
+stopifnot(isTRUE(greedy_result$fit$converged))
+stopifnot(nrow(greedy_result$fit$alpha) == 2L)
+stopifnot(identical(greedy_result$metadata$config$L_greedy, 2L))
+stopifnot(identical(greedy_result$metadata$config$greedy_lbf_cutoff, 1e6))
+stopifnot(identical(greedy_result$metadata$L_final, 2L))
+stopifnot(isTRUE(greedy_result$metadata$L_greedy_used))
+
+for (invalid_step in list(0, 2.5, 5, Inf, NaN)) {
+  invalid_greedy_config <- tryCatch(
+    make_model_config(L = 4L, L_greedy = invalid_step),
+    error = identity
+  )
+  stopifnot(inherits(invalid_greedy_config, "error"))
+}
+
+for (invalid_cutoff in list(Inf, NaN)) {
+  invalid_greedy_config <- tryCatch(
+    make_model_config(L = 4L, L_greedy = 2L, greedy_lbf_cutoff = invalid_cutoff),
+    error = identity
+  )
+  stopifnot(inherits(invalid_greedy_config, "error"))
+}
 
 pip <- extract_variant_pips(result$fit, model_prepared)
 stopifnot(all(c("variant_id", "pip") %in% names(pip)))
