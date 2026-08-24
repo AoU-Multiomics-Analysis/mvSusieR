@@ -6,10 +6,13 @@ workflow PrepareTransWindow {
     File genome_dosage
     File genome_dosage_tbi
     File trans_window_associations
-    Array[File] phenotype_files
-    Array[String] phenotype_modalities
-    Boolean extract_cis_window_phenotypes = true
-    Int top_n_trans_phenotypes = 25
+    File expression_phenotypes
+    File splicing_phenotypes
+    File protein_phenotypes
+    File target_phenotypes
+    Int top_n_expression = 25
+    Int top_n_splicing = 25
+    Int top_n_protein = 15
   }
 
   call PrepareWindowGenotypes {
@@ -24,10 +27,13 @@ workflow PrepareTransWindow {
     input:
       window_id = window_id,
       trans_window_associations = trans_window_associations,
-      phenotype_files = phenotype_files,
-      phenotype_modalities = phenotype_modalities,
-      extract_cis_window_phenotypes = extract_cis_window_phenotypes,
-      top_n_trans_phenotypes = top_n_trans_phenotypes
+      expression_phenotypes = expression_phenotypes,
+      splicing_phenotypes = splicing_phenotypes,
+      protein_phenotypes = protein_phenotypes,
+      target_phenotypes = target_phenotypes,
+      top_n_expression = top_n_expression,
+      top_n_splicing = top_n_splicing,
+      top_n_protein = top_n_protein
   }
 
   output {
@@ -50,11 +56,13 @@ task PrepareWindowGenotypes {
   command <<<
     set -euo pipefail
 
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting genotype preparation for ~{window_id}."
     mkdir -p output
 
     dosage_name="$(basename ~{genome_dosage})"
     ln -sf ~{genome_dosage_tbi} "${dosage_name}.tbi"
 
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Resolving the locus coordinates."
     window_row="$(awk -F '\t' -v requested_id='~{window_id}' '
       NR == 1 {
         for (i = 1; i <= NF; i++) column[$i] = i
@@ -74,6 +82,7 @@ task PrepareWindowGenotypes {
     ' <(gzip -cd ~{trans_window_associations}))"
 
     IFS=$'\t' read -r window_chrom window_start window_end <<< "${window_row}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracting all locus genotype rows."
     tabix -H "${dosage_name}" > output/window_dosage.tsv
     tabix "${dosage_name}" \
       "${window_chrom}:$((window_start + 1))-${window_end}" \
@@ -89,6 +98,8 @@ task PrepareWindowGenotypes {
         "${window_end}" \
         'window_dosage.tsv'
     } > output/window_manifest.tsv
+    test -s output/window_manifest.tsv
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Genotype preparation complete."
   >>>
 
   output {
@@ -108,24 +119,36 @@ task PrepareWindowPhenotypes {
   input {
     String window_id
     File trans_window_associations
-    Array[File] phenotype_files
-    Array[String] phenotype_modalities
-    Boolean extract_cis_window_phenotypes
-    Int top_n_trans_phenotypes
+    File expression_phenotypes
+    File splicing_phenotypes
+    File protein_phenotypes
+    File target_phenotypes
+    Int top_n_expression
+    Int top_n_splicing
+    Int top_n_protein
   }
 
   command <<<
     set -euo pipefail
-    test ~{length(phenotype_files)} -gt 0
 
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting joint phenotype preparation for ~{window_id}."
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Top-N values: expression=~{top_n_expression}, splicing=~{top_n_splicing}, protein=~{top_n_protein}."
     Rscript /opt/mvsusie/scripts/prepare_trans_window.R \
       --window-id ~{window_id} \
       --trans-associations ~{trans_window_associations} \
-      --phenotype-files "~{sep="," phenotype_files}" \
-      --phenotype-modalities "~{sep="," phenotype_modalities}" \
-      --extract-cis-window-phenotypes ~{extract_cis_window_phenotypes} \
-      --top-n-trans-phenotypes ~{top_n_trans_phenotypes} \
+      --expression-phenotypes ~{expression_phenotypes} \
+      --splicing-phenotypes ~{splicing_phenotypes} \
+      --protein-phenotypes ~{protein_phenotypes} \
+      --target-phenotypes ~{target_phenotypes} \
+      --top-n-expression ~{top_n_expression} \
+      --top-n-splicing ~{top_n_splicing} \
+      --top-n-protein ~{top_n_protein} \
       --output-dir output
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Validating joint phenotype outputs."
+    test -s output/window_phenotypes.tsv
+    test -s output/window_phenotypes.bed.gz
+    test -s output/window_qc.tsv
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Joint phenotype preparation complete."
   >>>
 
   output {

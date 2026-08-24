@@ -7,16 +7,36 @@ suppressPackageStartupMessages({
   library(tibble)
 })
 
+prepare_log <- function(message_text) {
+  message(format(Sys.time(), "[%Y-%m-%d %H:%M:%S] "), message_text)
+}
+
 require_columns <- function(data, required, label) {
   missing <- setdiff(required, names(data))
   if (length(missing) > 0L) {
     stop(
-      label,
-      " is missing required columns: ",
+      label, " is missing required columns: ",
       paste(missing, collapse = ", "),
       call. = FALSE
     )
   }
+}
+
+required_joint_modalities <- function() {
+  c("expression", "splicing", "protein")
+}
+
+validate_joint_modalities <- function(modalities, label) {
+  expected <- sort(required_joint_modalities())
+  actual <- sort(unique(as.character(modalities)))
+  if (!identical(actual, expected)) {
+    stop(
+      label, " must contain exactly: ",
+      paste(required_joint_modalities(), collapse = ", "),
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
 }
 
 normalize_trans_window_associations <- function(data) {
@@ -28,7 +48,7 @@ normalize_trans_window_associations <- function(data) {
     ),
     "Trans-window associations"
   )
-  associations <- data %>%
+  associations <- data |>
     transmute(
       window_id = as.character(.data$window_id),
       chrom = as.character(.data$chrom),
@@ -55,8 +75,12 @@ normalize_trans_window_associations <- function(data) {
       call. = FALSE
     )
   }
-  if (anyNA(associations$p_value) || any(!is.finite(associations$p_value))) {
-    stop("Trans-window p-values must be finite numeric values.", call. = FALSE)
+  if (
+    anyNA(associations$p_value) ||
+    any(!is.finite(associations$p_value)) ||
+    any(associations$p_value < 0 | associations$p_value > 1)
+  ) {
+    stop("Trans-window p-values must be finite values from zero through one.", call. = FALSE)
   }
   associations
 }
@@ -73,8 +97,8 @@ read_trans_window_associations <- function(path) {
 }
 
 select_prepare_window <- function(trans_associations, window_id) {
-  selected <- trans_associations %>%
-    filter(.data$window_id == !!window_id) %>%
+  selected <- trans_associations |>
+    filter(.data$window_id == !!window_id) |>
     distinct(.data$window_id, .data$chrom, .data$start, .data$end)
   if (nrow(selected) != 1L) {
     stop(
@@ -86,33 +110,106 @@ select_prepare_window <- function(trans_associations, window_id) {
   selected
 }
 
-select_top_trans_phenotypes <- function(trans_associations, top_n) {
+validate_top_n_by_modality <- function(top_n_by_modality) {
+  expected <- required_joint_modalities()
+  values <- suppressWarnings(as.numeric(top_n_by_modality))
+  if (
+    !identical(sort(names(top_n_by_modality)), sort(expected)) ||
+    length(values) != length(expected) ||
+    anyNA(values) || any(!is.finite(values)) ||
+    any(values < 1L) || any(values != as.integer(values))
+  ) {
+    stop(
+      "top_n_by_modality must contain one positive integer per required modality.",
+      call. = FALSE
+    )
+  }
+  stats::setNames(as.integer(values), names(top_n_by_modality))
+}
+
+select_top_trans_phenotypes <- function(
+    trans_associations,
+    top_n_by_modality
+) {
   require_columns(
     trans_associations,
     c("molecular_trait_id", "modality", "p_value"),
     "Trans associations"
   )
-  if (
-    length(top_n) != 1L || is.na(top_n) ||
-    top_n < 1L || top_n != as.integer(top_n)
-  ) {
-    stop("top_n must be a positive integer.", call. = FALSE)
-  }
+  validate_joint_modalities(trans_associations$modality, "Trans associations")
+  top_n_by_modality <- validate_top_n_by_modality(top_n_by_modality)
 
-  associations <- trans_associations %>%
-    mutate(.pval = suppressWarnings(as.numeric(.data$p_value)))
-  if (anyNA(associations$.pval) || any(!is.finite(associations$.pval))) {
+  eligible <- trans_associations |>
+    transmute(
+      modality = as.character(.data$modality),
+      molecular_trait_id = as.character(.data$molecular_trait_id),
+      p_value = suppressWarnings(as.numeric(.data$p_value))
+    )
+  if (anyNA(eligible$p_value) || any(!is.finite(eligible$p_value))) {
     stop("Trans association p-values must be finite numeric values.", call. = FALSE)
   }
 
-  associations %>%
-    group_by(.data$modality, .data$molecular_trait_id) %>%
-    summarise(min_pval = min(.data$.pval), .groups = "drop") %>%
-    group_by(.data$modality) %>%
-    arrange(.data$min_pval, .data$molecular_trait_id, .by_group = TRUE) %>%
-    slice_head(n = top_n) %>%
-    ungroup() %>%
-    arrange(.data$min_pval, .data$modality, .data$molecular_trait_id)
+  eligible <- eligible |>
+    group_by(.data$modality, .data$molecular_trait_id) |>
+    summarise(min_pval = min(.data$p_value), .groups = "drop") |>
+    arrange(.data$modality, .data$min_pval, .data$molecular_trait_id)
+
+  available <- table(factor(
+    eligible$modality,
+    levels = required_joint_modalities()
+  ))
+  requested <- top_n_by_modality[required_joint_modalities()]
+  if (any(as.integer(available) < requested)) {
+    stop(
+      "Each modality must contain at least its requested number of trans phenotypes.",
+      call. = FALSE
+    )
+  }
+
+  eligible |>
+    group_by(.data$modality) |>
+    group_modify(function(.x, .y) {
+      slice_head(
+        .x,
+        n = unname(top_n_by_modality[[.y$modality[[1L]]]])
+      )
+    }) |>
+    ungroup()
+}
+
+read_target_phenotypes <- function(path) {
+  targets <- read_tsv(
+    path,
+    col_types = cols(.default = col_character()),
+    name_repair = "minimal",
+    show_col_types = FALSE,
+    progress = FALSE
+  )
+  require_columns(
+    targets,
+    c("window_id", "modality", "phenotype_id"),
+    "Target phenotypes"
+  )
+  targets <- targets |>
+    transmute(
+      window_id = as.character(.data$window_id),
+      modality = as.character(.data$modality),
+      phenotype_id = as.character(.data$phenotype_id)
+    )
+  if (
+    any(!nzchar(targets$window_id)) ||
+    any(!nzchar(targets$modality)) ||
+    any(!nzchar(targets$phenotype_id))
+  ) {
+    stop("Target phenotype identifiers cannot be empty.", call. = FALSE)
+  }
+  if (any(!targets$modality %in% c("expression", "splicing"))) {
+    stop("Target phenotypes may contain expression and splicing only.", call. = FALSE)
+  }
+  if (anyDuplicated(targets[c("window_id", "modality", "phenotype_id")])) {
+    stop("Target phenotype rows contain duplicates.", call. = FALSE)
+  }
+  targets
 }
 
 read_prepare_phenotype_table <- function(path, modality) {
@@ -123,7 +220,7 @@ read_prepare_phenotype_table <- function(path, modality) {
     show_col_types = FALSE,
     progress = FALSE
   )
-  if (ncol(phenotype_table) < 4L) {
+  if (ncol(phenotype_table) < 5L) {
     stop(
       paste0(
         "Phenotype file must contain chromosome, start, end, phenotype ID, ",
@@ -135,7 +232,7 @@ read_prepare_phenotype_table <- function(path, modality) {
   }
 
   id_column <- names(phenotype_table)[[4L]]
-  phenotype_table <- phenotype_table %>%
+  phenotype_table <- phenotype_table |>
     mutate(
       .phenotype_id = as.character(.data[[id_column]]),
       .chrom = as.character(.data[[names(phenotype_table)[[1L]]]]),
@@ -150,53 +247,54 @@ read_prepare_phenotype_table <- function(path, modality) {
   ) {
     stop("Phenotype coordinates are invalid in: ", path, call. = FALSE)
   }
+  if (any(!nzchar(phenotype_table$.phenotype_id))) {
+    stop("Phenotype IDs cannot be empty in: ", path, call. = FALSE)
+  }
   if (anyDuplicated(phenotype_table$.phenotype_id)) {
     stop("Phenotype file contains duplicate IDs: ", path, call. = FALSE)
   }
   phenotype_table
 }
 
-select_prepare_phenotypes <- function(
+select_joint_phenotype_rows <- function(
     phenotype_table,
-    window,
+    modality,
     trans_ids,
-    extract_cis_window_phenotypes
+    target_ids
 ) {
-  cis_rows <- phenotype_table %>%
-    filter(
-      .data$.chrom == window$chrom[[1L]],
-      .data$.start < window$end[[1L]],
-      .data$.end > window$start[[1L]]
-    ) %>%
-    mutate(.selection = "cis")
-
-  trans_rows <- phenotype_table %>%
-    filter(.data$.phenotype_id %in% trans_ids) %>%
-    mutate(.selection = "trans")
-
-  selected <- if (isTRUE(extract_cis_window_phenotypes)) {
-    bind_rows(trans_rows, cis_rows) %>%
-      distinct(.data$.phenotype_id, .keep_all = TRUE) %>%
-      arrange(.data$.row_id)
-  } else {
-    trans_rows %>%
-      distinct(.data$.phenotype_id, .keep_all = TRUE) %>%
-      arrange(.data$.row_id)
+  requested_ids <- unique(c(trans_ids, target_ids))
+  missing_ids <- setdiff(requested_ids, phenotype_table$.phenotype_id)
+  if (length(missing_ids) > 0L) {
+    target_missing <- intersect(missing_ids, target_ids)
+    if (length(target_missing) > 0L) {
+      stop(
+        "Target phenotype is absent from the ", modality, " file: ",
+        paste(target_missing, collapse = ", "),
+        call. = FALSE
+      )
+    }
+    stop(
+      "Selected trans phenotype is absent from the ", modality, " file: ",
+      paste(missing_ids, collapse = ", "),
+      call. = FALSE
+    )
   }
-
-  list(
-    table = selected,
-    n_input = nrow(phenotype_table),
-    n_trans = nrow(trans_rows),
-    n_cis = if (isTRUE(extract_cis_window_phenotypes)) nrow(cis_rows) else 0L,
-    n_retained = nrow(selected)
+  selected <- phenotype_table[match(requested_ids, phenotype_table$.phenotype_id), ]
+  selected$.outcome_key <- paste(modality, selected$.phenotype_id, sep = "::")
+  selected$.selection <- ifelse(
+    selected$.phenotype_id %in% target_ids,
+    "target",
+    "trans"
   )
+  selected
 }
 
 write_prepare_phenotype_subset <- function(selected_tables, output_dir) {
   output_path <- file.path(output_dir, "window_phenotypes.bed.gz")
   output_tables <- map(selected_tables, function(selected) {
-    selected %>% select(-starts_with("."))
+    output <- selected |> select(-starts_with("."))
+    output[[4L]] <- selected$.outcome_key
+    output
   })
   if (length(unique(map(output_tables, names))) != 1L) {
     stop(
@@ -213,125 +311,129 @@ write_prepare_phenotype_subset <- function(selected_tables, output_dir) {
 prepare_trans_window_data <- function(
     window_id,
     trans_associations,
-    phenotype_inputs,
+    expression_phenotypes,
+    splicing_phenotypes,
+    protein_phenotypes,
+    target_phenotypes,
     output_dir,
-    extract_cis_window_phenotypes = TRUE,
-    top_n_trans_phenotypes = 25L
+    top_n_expression = 25L,
+    top_n_splicing = 25L,
+    top_n_protein = 15L
 ) {
+  prepare_log(paste0("Starting joint phenotype preparation for window ", window_id, "."))
   trans_associations <- normalize_trans_window_associations(trans_associations)
-  window_associations <- trans_associations %>%
+  window_associations <- trans_associations |>
     filter(.data$window_id == !!window_id)
   if (!nrow(window_associations)) {
     stop("No trans associations found for window: ", window_id, call. = FALSE)
   }
-  window <- select_prepare_window(window_associations, window_id)
-  require_columns(
-    phenotype_inputs,
-    c("modality", "phenotype_file"),
-    "Phenotype inputs"
+  validate_joint_modalities(
+    window_associations$modality,
+    paste0("Trans associations for window ", window_id)
   )
-  if (anyDuplicated(phenotype_inputs$modality)) {
-    stop("Phenotype inputs must contain one file per modality.", call. = FALSE)
-  }
-  if (any(!file.exists(phenotype_inputs$phenotype_file))) {
-    stop("At least one phenotype input file does not exist.", call. = FALSE)
-  }
+  select_prepare_window(window_associations, window_id)
 
-  unknown_modalities <- setdiff(
-    unique(window_associations$modality),
-    phenotype_inputs$modality
+  phenotype_inputs <- c(
+    expression = expression_phenotypes,
+    splicing = splicing_phenotypes,
+    protein = protein_phenotypes
   )
-  if (length(unknown_modalities) > 0L) {
-    stop(
-      "Trans associations contain modalities without phenotype files: ",
-      paste(unknown_modalities, collapse = ", "),
-      call. = FALSE
-    )
+  if (any(!file.exists(phenotype_inputs))) {
+    stop("Every joint phenotype input file must exist.", call. = FALSE)
+  }
+  if (!file.exists(target_phenotypes)) {
+    stop("The target phenotype input file does not exist.", call. = FALSE)
+  }
+  top_n_by_modality <- validate_top_n_by_modality(c(
+    expression = top_n_expression,
+    splicing = top_n_splicing,
+    protein = top_n_protein
+  ))
+
+  prepare_log(sprintf(
+    "Selecting top trans outcomes: expression=%d, splicing=%d, protein=%d.",
+    top_n_by_modality[["expression"]],
+    top_n_by_modality[["splicing"]],
+    top_n_by_modality[["protein"]]
+  ))
+  selected_trans <- select_top_trans_phenotypes(
+    window_associations,
+    top_n_by_modality
+  )
+  targets <- read_target_phenotypes(target_phenotypes) |>
+    filter(.data$window_id == !!window_id)
+  if (!nrow(targets)) {
+    stop("No target phenotypes were provided for window: ", window_id, call. = FALSE)
   }
 
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-  trans_associations <- select_top_trans_phenotypes(
-    window_associations,
-    top_n = top_n_trans_phenotypes
-  )
-
-  per_modality_results <- map(seq_len(nrow(phenotype_inputs)), function(index) {
-    input <- phenotype_inputs[index, ]
+  selected_tables <- map(required_joint_modalities(), function(modality) {
+    prepare_log(paste0("Reading and selecting ", modality, " phenotypes."))
     phenotype_table <- read_prepare_phenotype_table(
-      input$phenotype_file[[1L]],
-      input$modality[[1L]]
+      phenotype_inputs[[modality]],
+      modality
     )
-    trans_ids <- trans_associations %>%
-      filter(.data$modality == input$modality[[1L]]) %>%
+    trans_ids <- selected_trans |>
+      filter(.data$modality == !!modality) |>
       pull(.data$molecular_trait_id)
-    selected <- select_prepare_phenotypes(
-      phenotype_table = phenotype_table,
-      window = window,
-      trans_ids = trans_ids,
-      extract_cis_window_phenotypes = extract_cis_window_phenotypes
-    )
-    if (selected$n_retained == 0L) return(NULL)
-    list(
-      modality = input$modality[[1L]],
-      trans_ids = trans_ids,
-      selected = selected
+    target_ids <- targets |>
+      filter(.data$modality == !!modality) |>
+      pull(.data$phenotype_id)
+    select_joint_phenotype_rows(
+      phenotype_table,
+      modality,
+      trans_ids,
+      target_ids
     )
   })
-  per_modality_results <- compact(per_modality_results)
-
-  if (length(per_modality_results) == 0L) {
-    stop("No trans or cis phenotypes were selected for window: ", window_id, call. = FALSE)
-  }
+  names(selected_tables) <- required_joint_modalities()
 
   phenotype_data_path <- write_prepare_phenotype_subset(
-    map(per_modality_results, "selected") %>% map("table"),
+    selected_tables,
     output_dir
   )
-  per_modality <- map_dfr(per_modality_results, function(result) {
-    selected <- result$selected
+  manifest <- imap_dfr(selected_tables, function(selected, modality) {
     tibble(
       window_id = window_id,
-      phenotype_id = selected$table$.phenotype_id,
-      modality = result$modality,
-      phenotype_file = basename(phenotype_data_path),
-      n_input = selected$n_input,
-      n_trans = selected$n_trans,
-      n_trans_selected = length(result$trans_ids),
-      n_cis = selected$n_cis,
-      n_retained = selected$n_retained
+      outcome_key = selected$.outcome_key,
+      phenotype_id = selected$.phenotype_id,
+      modality = modality,
+      phenotype_file = basename(phenotype_data_path)
     )
   })
-  if (anyDuplicated(per_modality$phenotype_id)) {
-    stop(
-      "Phenotype IDs must be unique across modalities for a combined file.",
-      call. = FALSE
-    )
+  if (anyDuplicated(manifest$outcome_key)) {
+    stop("Joint phenotype outcome keys must be unique.", call. = FALSE)
   }
 
   manifest_path <- file.path(output_dir, "window_phenotypes.tsv")
-  write_tsv(
-    per_modality %>% select(all_of(c("window_id", "phenotype_id", "modality", "phenotype_file"))),
-    manifest_path
-  )
+  write_tsv(manifest, manifest_path)
 
+  qc <- imap_dfr(selected_tables, function(selected, modality) {
+    tibble(
+      window_id = window_id,
+      modality = modality,
+      n_input = nrow(read_prepare_phenotype_table(
+        phenotype_inputs[[modality]],
+        modality
+      )),
+      n_trans_eligible = sum(window_associations$modality == modality),
+      n_trans_selected = top_n_by_modality[[modality]],
+      n_targets = sum(targets$modality == modality),
+      n_retained = nrow(selected),
+      top_n = top_n_by_modality[[modality]]
+    )
+  })
   qc_path <- file.path(output_dir, "window_qc.tsv")
-  write_tsv(
-    per_modality %>%
-      distinct(
-        .data$window_id,
-        .data$modality,
-        .data$n_input,
-        .data$n_trans,
-        .data$n_trans_selected,
-        .data$n_cis,
-        .data$n_retained
-      ) %>%
-      mutate(
-        top_n_trans_phenotypes = top_n_trans_phenotypes,
-        extract_cis_window_phenotypes = extract_cis_window_phenotypes
-      ),
-    qc_path
-  )
+  write_tsv(qc, qc_path)
+
+  required_outputs <- c(phenotype_data_path, manifest_path, qc_path)
+  if (any(!file.exists(required_outputs)) || any(file.info(required_outputs)$size == 0)) {
+    stop("Joint phenotype preparation did not write every required output.", call. = FALSE)
+  }
+  prepare_log(sprintf(
+    "Joint phenotype preparation complete: %d outcomes retained.",
+    nrow(manifest)
+  ))
 
   list(
     window_id = window_id,
@@ -347,50 +449,34 @@ main <- function() {
     option_list = list(
       optparse::make_option("--window-id", type = "character"),
       optparse::make_option("--trans-associations", type = "character"),
-      optparse::make_option("--phenotype-files", type = "character"),
-      optparse::make_option("--phenotype-modalities", type = "character"),
-      optparse::make_option(
-        "--top-n-trans-phenotypes",
-        type = "integer",
-        default = 25L
-      ),
-      optparse::make_option(
-        "--extract-cis-window-phenotypes",
-        type = "logical",
-        default = TRUE
-      ),
+      optparse::make_option("--expression-phenotypes", type = "character"),
+      optparse::make_option("--splicing-phenotypes", type = "character"),
+      optparse::make_option("--protein-phenotypes", type = "character"),
+      optparse::make_option("--target-phenotypes", type = "character"),
+      optparse::make_option("--top-n-expression", type = "integer", default = 25L),
+      optparse::make_option("--top-n-splicing", type = "integer", default = 25L),
+      optparse::make_option("--top-n-protein", type = "integer", default = 15L),
       optparse::make_option("--output-dir", type = "character")
     ),
-    description = "Prepare one trans-window mvSuSiE input bundle."
+    description = "Prepare one joint expression, splicing, and protein window."
   )
-
-  phenotype_files <- split_cli_paths(require_cli_arg(args, "phenotype_files"))
-  phenotype_modalities <- split_cli_paths(
-    require_cli_arg(args, "phenotype_modalities")
-  )
-  if (length(phenotype_files) != length(phenotype_modalities)) {
-    stop(
-      "The number of phenotype files must match the number of phenotype modalities.",
-      call. = FALSE
-    )
-  }
 
   result <- prepare_trans_window_data(
     window_id = require_cli_arg(args, "window_id"),
     trans_associations = read_trans_window_associations(
       require_cli_arg(args, "trans_associations")
     ),
-    phenotype_inputs = tibble(
-      modality = phenotype_modalities,
-      phenotype_file = phenotype_files
-    ),
+    expression_phenotypes = require_cli_arg(args, "expression_phenotypes"),
+    splicing_phenotypes = require_cli_arg(args, "splicing_phenotypes"),
+    protein_phenotypes = require_cli_arg(args, "protein_phenotypes"),
+    target_phenotypes = require_cli_arg(args, "target_phenotypes"),
     output_dir = require_cli_arg(args, "output_dir"),
-    extract_cis_window_phenotypes = args$extract_cis_window_phenotypes,
-    top_n_trans_phenotypes = as_cli_integer(args, "top_n_trans_phenotypes", 25L)
+    top_n_expression = as_cli_integer(args, "top_n_expression", 25L),
+    top_n_splicing = as_cli_integer(args, "top_n_splicing", 25L),
+    top_n_protein = as_cli_integer(args, "top_n_protein", 15L)
   )
 
-  message("Prepared window ", result$window_id, ".")
-  message("Phenotype manifest: ", result$window_phenotypes)
+  prepare_log(paste0("Phenotype manifest saved: ", result$window_phenotypes))
 }
 
 if (sys.nframe() == 0L) {

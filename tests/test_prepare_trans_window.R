@@ -8,99 +8,143 @@ suppressPackageStartupMessages({
 
 source("scripts/prepare_trans_window.R")
 
+expect_error_matching <- function(expression, pattern) {
+  observed <- tryCatch(
+    {
+      force(expression)
+      NA_character_
+    },
+    error = function(condition) conditionMessage(condition)
+  )
+  stopifnot(!is.na(observed), grepl(pattern, observed, ignore.case = TRUE))
+}
+
 fixture_dir <- tempfile("prepare-trans-window-fixture-")
 dir.create(fixture_dir, recursive = TRUE)
 on.exit(unlink(fixture_dir, recursive = TRUE), add = TRUE)
 
-system2(
+status <- system2(
   command = "Rscript",
-  args = c(
-    "tests/fixtures/trans_window/generate_prepare_fixture.R",
-    fixture_dir
-  )
+  args = c("tests/fixtures/trans_window/generate_prepare_fixture.R", fixture_dir)
 )
+stopifnot(identical(status, 0L))
 
+fixture <- function(name) file.path(fixture_dir, name)
 trans_associations <- read_tsv(
-  file.path(fixture_dir, "trans_window_associations.tsv.gz"),
+  fixture("trans_window_associations.tsv.gz"),
   show_col_types = FALSE
 )
-phenotype_inputs <- tibble(
-  modality = c("expression", "splicing"),
-  phenotype_file = file.path(fixture_dir, c("expression.bed.gz", "splicing.bed.gz"))
-)
 
-with_cis <- prepare_trans_window_data(
+result <- prepare_trans_window_data(
   window_id = "w1",
   trans_associations = trans_associations,
-  phenotype_inputs = phenotype_inputs,
-  output_dir = file.path(fixture_dir, "with_cis"),
-  extract_cis_window_phenotypes = TRUE,
-  top_n_trans_phenotypes = 1L
+  expression_phenotypes = fixture("expression.bed.gz"),
+  splicing_phenotypes = fixture("splicing.bed.gz"),
+  protein_phenotypes = fixture("protein.bed.gz"),
+  target_phenotypes = fixture("target_phenotypes.tsv"),
+  output_dir = fixture("prepared")
 )
 
-stopifnot(!"window_dosage" %in% names(with_cis))
-stopifnot(!"window_manifest" %in% names(with_cis))
-stopifnot(file.exists(with_cis$window_phenotypes))
-stopifnot(file.exists(with_cis$phenotype_data))
-stopifnot(file.exists(with_cis$window_qc))
-
-manifest <- read_tsv(with_cis$window_phenotypes, show_col_types = FALSE)
-stopifnot(
-  identical(
-    manifest %>% arrange(modality, phenotype_id) %>% pull(phenotype_id),
-    c("ENSG_CIS", "ENSG_TRANS", "splice_cis", "splice_trans")
-  )
+manifest <- read_tsv(result$window_phenotypes, show_col_types = FALSE)
+expected_columns <- c(
+  "window_id", "outcome_key", "phenotype_id", "modality", "phenotype_file"
 )
-stopifnot(all(manifest$window_id == "w1"))
-stopifnot(!"ENSG_TRANS_2" %in% manifest$phenotype_id)
-stopifnot(!"ENSG_W2" %in% manifest$phenotype_id)
-stopifnot(
-  all(file.exists(file.path(dirname(with_cis$window_phenotypes), manifest$phenotype_file)))
-)
+stopifnot(identical(names(manifest), expected_columns))
+expected_counts <- c(expression = 26L, splicing = 27L, protein = 15L)
+actual_counts <- table(factor(manifest$modality, levels = names(expected_counts)))
+stopifnot(identical(as.integer(actual_counts), unname(expected_counts)))
+stopifnot(identical(
+  manifest$outcome_key,
+  paste(manifest$modality, manifest$phenotype_id, sep = "::")
+))
+stopifnot(!anyDuplicated(manifest$outcome_key))
+stopifnot(all(c(
+  "expression::expr_target",
+  "splicing::splice_target_1",
+  "splicing::splice_target_2"
+) %in% manifest$outcome_key))
 
-qc <- read_tsv(with_cis$window_qc, show_col_types = FALSE)
-stopifnot(
-  all(qc$top_n_trans_phenotypes == 1L),
-  sum(qc$n_trans_selected) == 2L
-)
+combined <- read_tsv(result$phenotype_data, show_col_types = FALSE)
+stopifnot(identical(combined$phenotype_id, manifest$outcome_key))
+stopifnot(nrow(combined) == nrow(manifest))
 
-source("scripts/trans_window_io.R")
-combined_manifest <- read_window_phenotypes_manifest(with_cis$window_phenotypes)
-combined_reader <- read_window_phenotypes(
-  window_id = "w1",
-  phenotype_manifest = combined_manifest,
-  phenotype_files = with_cis$phenotype_data
-)
-stopifnot(identical(combined_reader$phenotype_ids, manifest$phenotype_id))
-stopifnot(identical(as.character(combined_reader$metadata$modality), manifest$modality))
+qc <- read_tsv(result$window_qc, show_col_types = FALSE)
+stopifnot(identical(as.integer(qc$top_n), c(25L, 25L, 15L)))
+stopifnot(identical(as.integer(qc$n_targets), c(1L, 2L, 0L)))
 
-combined_phenotypes <- read_tsv(with_cis$phenotype_data, show_col_types = FALSE)
-stopifnot(
-  identical(
-    combined_phenotypes$phenotype_id,
-    c("ENSG_CIS", "ENSG_TRANS", "splice_cis", "splice_trans")
-  )
+overlap_targets <- tribble(
+  ~window_id, ~modality, ~phenotype_id,
+  "w1", "expression", "expr_27",
+  "w1", "splicing", "splice_target_1",
+  "w1", "splicing", "splice_target_2"
 )
-stopifnot(length(unique(manifest$phenotype_file)) == 1L)
-
-without_cis <- prepare_trans_window_data(
+overlap_target_path <- fixture("overlap_targets.tsv")
+write_tsv(overlap_targets, overlap_target_path)
+overlap_result <- prepare_trans_window_data(
   window_id = "w1",
   trans_associations = trans_associations,
-  phenotype_inputs = phenotype_inputs,
-  output_dir = file.path(fixture_dir, "without_cis"),
-  extract_cis_window_phenotypes = FALSE,
-  top_n_trans_phenotypes = 1L
+  expression_phenotypes = fixture("expression.bed.gz"),
+  splicing_phenotypes = fixture("splicing.bed.gz"),
+  protein_phenotypes = fixture("protein.bed.gz"),
+  target_phenotypes = overlap_target_path,
+  output_dir = fixture("overlap")
 )
-
-manifest_without_cis <- read_tsv(
-  without_cis$window_phenotypes,
+overlap_manifest <- read_tsv(
+  overlap_result$window_phenotypes,
   show_col_types = FALSE
 )
-stopifnot(
-  identical(
-    manifest_without_cis %>% arrange(modality, phenotype_id) %>% pull(phenotype_id),
-    c("ENSG_TRANS", "splice_trans")
-  )
+stopifnot(sum(overlap_manifest$outcome_key == "expression::expr_27") == 1L)
+
+missing_modality <- trans_associations |>
+  filter(.data$modality != "protein")
+expect_error_matching(
+  prepare_trans_window_data(
+    "w1", missing_modality,
+    fixture("expression.bed.gz"), fixture("splicing.bed.gz"),
+    fixture("protein.bed.gz"), fixture("target_phenotypes.tsv"),
+    fixture("missing_modality")
+  ),
+  "exactly.*expression.*splicing.*protein"
 )
 
-message("Single-window preparation tests passed")
+isoform_associations <- trans_associations
+isoform_associations$modality[[1L]] <- "isoform_usage"
+expect_error_matching(
+  prepare_trans_window_data(
+    "w1", isoform_associations,
+    fixture("expression.bed.gz"), fixture("splicing.bed.gz"),
+    fixture("protein.bed.gz"), fixture("target_phenotypes.tsv"),
+    fixture("isoform")
+  ),
+  "exactly.*expression.*splicing.*protein"
+)
+
+missing_target_path <- fixture("missing_target.tsv")
+write_tsv(
+  tibble(window_id = "w1", modality = "expression", phenotype_id = "absent"),
+  missing_target_path
+)
+expect_error_matching(
+  prepare_trans_window_data(
+    "w1", trans_associations,
+    fixture("expression.bed.gz"), fixture("splicing.bed.gz"),
+    fixture("protein.bed.gz"), missing_target_path,
+    fixture("missing_target")
+  ),
+  "target.*absent"
+)
+
+duplicate_target_path <- fixture("duplicate_target.tsv")
+duplicate_target <- read_tsv(fixture("target_phenotypes.tsv"), show_col_types = FALSE)
+write_tsv(bind_rows(duplicate_target, duplicate_target[1L, ]), duplicate_target_path)
+expect_error_matching(
+  prepare_trans_window_data(
+    "w1", trans_associations,
+    fixture("expression.bed.gz"), fixture("splicing.bed.gz"),
+    fixture("protein.bed.gz"), duplicate_target_path,
+    fixture("duplicate_target")
+  ),
+  "target.*duplicate"
+)
+
+message("Joint preparation tests passed")

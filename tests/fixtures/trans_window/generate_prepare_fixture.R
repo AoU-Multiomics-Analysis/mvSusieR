@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 
 suppressPackageStartupMessages({
+  library(dplyr)
   library(readr)
   library(tibble)
 })
@@ -13,41 +14,69 @@ if (length(args) != 1L) {
 output_dir <- normalizePath(args[[1L]], mustWork = FALSE)
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-write_tsv(
+make_associations <- function(modality, prefix, count) {
   tibble(
-    window_id = c("w1", "w1", "w1", "w2"),
-    chrom = c("chr1", "chr1", "chr1", "chr1"),
-    start = c(100L, 100L, 100L, 300L),
-    end = c(200L, 200L, 200L, 400L),
-    modality = c("expression", "splicing", "expression", "expression"),
-    molecular_trait_id = c("ENSG_TRANS", "splice_trans", "ENSG_TRANS_2", "ENSG_W2"),
-    p_value = c(1e-10, 2e-10, 5e-9, 1e-12)
-  ),
+    window_id = "w1",
+    chrom = "chr1",
+    start = 100L,
+    end = 200L,
+    modality = modality,
+    molecular_trait_id = sprintf("%s_%02d", prefix, seq_len(count)),
+    p_value = 10^-(seq_len(count) + 2L)
+  )
+}
+
+associations <- bind_rows(
+  make_associations("expression", "expr", 27L),
+  make_associations("splicing", "splice", 27L),
+  make_associations("protein", "protein", 17L),
+  tibble(
+    window_id = "w2", chrom = "chr1", start = 300L, end = 400L,
+    modality = "expression", molecular_trait_id = "expr_w2", p_value = 1e-20
+  )
+)
+write_tsv(
+  associations,
   file.path(output_dir, "trans_window_associations.tsv.gz")
 )
 
-write_tsv(
+make_phenotypes <- function(prefix, count, targets = character()) {
+  ids <- c(sprintf("%s_%02d", prefix, seq_len(count)), targets)
+  index <- seq_along(ids)
   tibble(
-    chr = c("chr1", "chr1", "chr2", "chr1", "chr2"),
-    start = c(150L, 250L, 500L, 350L, 520L),
-    end = c(160L, 260L, 510L, 360L, 530L),
-    phenotype_id = c("ENSG_CIS", "ENSG_OUT", "ENSG_TRANS", "ENSG_W2", "ENSG_TRANS_2"),
-    sample_1 = c(1, 2, 3, 4, 5),
-    sample_2 = c(2, 3, 4, 5, 6)
-  ),
+    chr = ifelse(index %% 2L == 0L, "chr2", "chr3"),
+    start = 500L + index * 10L,
+    end = 505L + index * 10L,
+    phenotype_id = ids,
+    sample_1 = index / 10,
+    sample_2 = index / 5
+  )
+}
+
+write_tsv(
+  make_phenotypes("expr", 27L, "expr_target"),
   file.path(output_dir, "expression.bed.gz")
+)
+write_tsv(
+  make_phenotypes(
+    "splice", 27L,
+    c("splice_target_1", "splice_target_2")
+  ),
+  file.path(output_dir, "splicing.bed.gz")
+)
+write_tsv(
+  make_phenotypes("protein", 17L),
+  file.path(output_dir, "protein.bed.gz")
 )
 
 write_tsv(
-  tibble(
-    chr = c("chr1", "chr3", "chr1"),
-    start = c(199L, 600L, 350L),
-    end = c(250L, 610L, 360L),
-    phenotype_id = c("splice_cis", "splice_trans", "splice_w2"),
-    sample_1 = c(0.1, 0.2, 0.3),
-    sample_2 = c(0.2, 0.3, 0.4)
+  tribble(
+    ~window_id, ~modality, ~phenotype_id,
+    "w1", "expression", "expr_target",
+    "w1", "splicing", "splice_target_1",
+    "w1", "splicing", "splice_target_2"
   ),
-  file.path(output_dir, "splicing.bed.gz")
+  file.path(output_dir, "target_phenotypes.tsv")
 )
 
 write_tsv(
