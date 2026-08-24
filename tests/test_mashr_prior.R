@@ -1,6 +1,7 @@
+#!/usr/bin/env Rscript
+
 source("scripts/trans_window_prior.R")
 
-stopifnot(exists("prepare_mashr_prior_for_mvsusie", mode = "function"))
 scale_test_prior <- mvsusieR::create_mixture_prior(
   mixture_prior = list(
     matrices = list(matrix(c(0.04, 0.03, 0.03, 0.09), 2L, 2L)),
@@ -30,19 +31,18 @@ stopifnot(isTRUE(all.equal(
 
 set.seed(20260821)
 X <- sweep(matrix(rnorm(80L * 12L), nrow = 80L), 2L, seq_len(12L), "+")
-Y <- sweep(matrix(rnorm(80L * 4L), nrow = 80L), 2L, seq_len(4L), "+")
+Y <- sweep(matrix(rnorm(80L * 6L), nrow = 80L), 2L, seq_len(6L), "+")
 reference <- susieR::compute_marginal_bhat_shat(
   X = scale(X, center = TRUE, scale = TRUE),
   Y = Y
 )
 marginal_messages <- capture.output(
-  marginal <- compute_marginal_bhat_shat_matrix(X, Y),
+  marginal <- compute_marginal_bhat_shat_matrix(X, Y, block_size = 5L),
   type = "message"
 )
 stopifnot(isTRUE(all.equal(marginal$Bhat, reference$Bhat, tolerance = 1e-10)))
 stopifnot(isTRUE(all.equal(marginal$Shat, reference$Shat, tolerance = 1e-10)))
-stopifnot(any(grepl("cross-product", marginal_messages, fixed = TRUE)))
-stopifnot(any(grepl("Marginal associations complete", marginal_messages, fixed = TRUE)))
+stopifnot(sum(grepl("cross-product block", marginal_messages, fixed = TRUE)) == 3L)
 
 X_large_offset <- X + 1e12
 large_offset_reference <- susieR::compute_marginal_bhat_shat(
@@ -83,61 +83,59 @@ relative_shat_error <- abs(
 stopifnot(max(relative_shat_error) < 1e-6)
 
 set.seed(20260822)
-Bhat <- matrix(rnorm(72L * 3L), nrow = 72L, ncol = 3L)
-Shat <- matrix(runif(72L * 3L, min = 0.05, max = 0.2), nrow = 72L, ncol = 3L)
+Bhat <- matrix(rnorm(72L * 6L), nrow = 72L, ncol = 6L)
+Shat <- matrix(runif(72L * 6L, min = 0.05, max = 0.2), nrow = 72L, ncol = 6L)
 rownames(Bhat) <- rownames(Shat) <- paste0("variant_", seq_len(nrow(Bhat)))
 colnames(Bhat) <- colnames(Shat) <- paste0("feature_", seq_len(ncol(Bhat)))
 
-association_path <- tempfile(fileext = ".tsv.gz")
-association_messages <- capture.output(
-  write_marginal_association_table(Bhat, Shat, association_path),
-  type = "message"
-)
-associations <- data.table::fread(association_path, check.names = FALSE)
-stopifnot(nrow(associations) == length(Bhat))
-stopifnot(identical(
-  names(associations),
-  c("variant_id", "feature_id", "bhat", "shat", "z", "p_value")
-))
-stopifnot(any(grepl("association table", association_messages, fixed = TRUE)))
-
+observed_pca <- new.env(parent = emptyenv())
+recording_cov_pca <- function(data, npc, subset) {
+  observed_pca$npc <- npc
+  observed_pca$subset <- subset
+  mashr::cov_pca(data, npc = npc, subset = subset)
+}
 prior_messages <- capture.output(
-  prior_fit <- learn_mashr_prior(
+  prior_fit <- learn_joint_mashr_prior(
     Bhat = Bhat,
     Shat = Shat,
-    n_pca = 2L,
-    seed = 1L
-  ),
-  type = "message"
-)
-
-stopifnot(inherits(prior_fit$prior, "mash_prior"))
-stopifnot(identical(prior_fit$mash_model_training_scope, "all_snps_in_window"))
-stopifnot(identical(prior_fit$mash_model_training_n, nrow(Bhat)))
-stopifnot(identical(prior_fit$covariance_training_scope, "strong_snps_in_window"))
-stopifnot(prior_fit$covariance_training_n <= nrow(Bhat))
-stopifnot(prior_fit$covariance_training_n >= 2L)
-stopifnot(isTRUE(prior_fit$extreme_deconvolution_used))
-stopifnot(prior_fit$n_covariance_inputs >= 1L)
-stopifnot(any(grepl("one-by-one", prior_messages, fixed = TRUE)))
-stopifnot(any(grepl("strong SNP rows", prior_messages, fixed = TRUE)))
-stopifnot(any(grepl("PCA covariance", prior_messages, fixed = TRUE)))
-stopifnot(any(grepl("extreme deconvolution", prior_messages, fixed = TRUE)))
-stopifnot(any(grepl("mashr mixture", prior_messages, fixed = TRUE)))
-
-pca_only_messages <- capture.output(
-  pca_only_prior <- learn_mashr_prior(
-    Bhat = Bhat,
-    Shat = Shat,
-    n_pca = 2L,
+    n_pca = 5L,
     seed = 1L,
-    use_extreme_deconvolution = FALSE
+    strong_lfsr = 0.05,
+    cov_pca_fun = recording_cov_pca
   ),
   type = "message"
 )
-stopifnot(!isTRUE(pca_only_prior$extreme_deconvolution_used))
-stopifnot(identical(pca_only_prior$covariance_input_method, "pca_only"))
-stopifnot(any(grepl("Skipping extreme deconvolution", pca_only_messages, fixed = TRUE)))
-stopifnot(!any(grepl("Starting extreme deconvolution", pca_only_messages, fixed = TRUE)))
 
-message("All-SNP mashr prior tests passed")
+stopifnot(identical(observed_pca$npc, 5L))
+stopifnot(length(observed_pca$subset) >= 5L)
+stopifnot(inherits(prior_fit$raw_prior, "mash_prior"))
+stopifnot(identical(prior_fit$mash_model_training_scope, "all_snps_in_window"))
+stopifnot(identical(prior_fit$mash_model_training_n, 72L))
+stopifnot(identical(prior_fit$covariance_training_scope, "strong_snps_in_window"))
+stopifnot(identical(prior_fit$pca_requested, 5L))
+stopifnot(prior_fit$pca_returned >= 1L)
+stopifnot(identical(prior_fit$covariance_input_method, "pca_only"))
+stopifnot(identical(prior_fit$Bhat, Bhat))
+stopifnot(identical(prior_fit$Shat, Shat))
+stopifnot(length(prior_fit$fitted_weights) >= 1L)
+stopifnot(abs(sum(prior_fit$fitted_weights) - 1) < 1e-8)
+stopifnot(any(grepl("one-by-one", prior_messages, fixed = TRUE)))
+stopifnot(any(grepl("PCA covariance", prior_messages, fixed = TRUE)))
+stopifnot(any(grepl("mashr mixture", prior_messages, fixed = TRUE)))
+stopifnot(!any(grepl("extreme deconvolution", prior_messages, fixed = TRUE)))
+
+bad_covariance <- list(diag(6L))
+bad_covariance[[1L]][1L, 1L] <- Inf
+bad_covariance_error <- tryCatch(
+  validate_mashr_covariances(bad_covariance, 6L),
+  error = identity
+)
+stopifnot(inherits(bad_covariance_error, "error"))
+
+wrong_dimension_error <- tryCatch(
+  validate_mashr_covariances(list(diag(5L)), 6L),
+  error = identity
+)
+stopifnot(inherits(wrong_dimension_error, "error"))
+
+message("Joint PCA-only mashr prior tests passed")

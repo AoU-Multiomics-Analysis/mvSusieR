@@ -1,33 +1,38 @@
 source("scripts/trans_window_logging.R")
+source("scripts/trans_window_prior.R")
+
+validate_positive_integer <- function(value, label) {
+  if (
+    length(value) != 1L || !is.numeric(value) || is.na(value) ||
+    !is.finite(value) || value < 1L || value != as.integer(value)
+  ) {
+    stop(label, " must be a positive integer.", call. = FALSE)
+  }
+  as.integer(value)
+}
 
 make_model_config <- function(
-  L = 10L,
-  L_greedy = NULL,
-  greedy_lbf_cutoff = 0.1,
-  max_iter = 100L,
-  tol = 1e-4,
-  coverage = 0.95,
-  min_abs_corr = 0.5,
-  n_thread = 1L,
-  prior_method = "canonical",
-  mashr_n_pca = 5L,
-  mashr_seed = NULL,
-  mashr_strong_lfsr = 0.05,
-  mashr_use_ed = TRUE,
-  estimate_residual_variance = TRUE,
-  marginal_output = NULL
+    start_L = 10L,
+    step_L = 5L,
+    max_L = 40L,
+    greedy_lbf_cutoff = 1,
+    max_iter = 100L,
+    tol = 1e-4,
+    coverage = 0.95,
+    min_abs_corr = 0.5,
+    n_thread = 1L,
+    mashr_n_pca = 5L,
+    mashr_seed = NULL,
+    mashr_strong_lfsr = 0.05
 ) {
-  if (!prior_method %in% c("canonical", "mashr")) {
-    stop("prior_method must be either canonical or mashr.", call. = FALSE)
+  start_L <- validate_positive_integer(start_L, "start_L")
+  step_L <- validate_positive_integer(step_L, "step_L")
+  max_L <- validate_positive_integer(max_L, "max_L")
+  if (start_L > max_L) {
+    stop("start_L cannot exceed max_L.", call. = FALSE)
   }
-  if (!is.null(L_greedy)) {
-    if (
-      length(L_greedy) != 1L || !is.numeric(L_greedy) || is.na(L_greedy) ||
-      !is.finite(L_greedy) || L_greedy != floor(L_greedy) ||
-      L_greedy < 1L || L_greedy > L
-    ) {
-      stop("L_greedy must be an integer from one through L.", call. = FALSE)
-    }
+  if ((max_L - start_L) %% step_L != 0L) {
+    stop("The greedy schedule must reach max_L exactly.", call. = FALSE)
   }
   if (
     length(greedy_lbf_cutoff) != 1L || is.na(greedy_lbf_cutoff) ||
@@ -35,116 +40,222 @@ make_model_config <- function(
   ) {
     stop("greedy_lbf_cutoff must be one finite number.", call. = FALSE)
   }
+  max_iter <- validate_positive_integer(max_iter, "max_iter")
+  n_thread <- validate_positive_integer(n_thread, "n_thread")
+  mashr_n_pca <- validate_positive_integer(mashr_n_pca, "mashr_n_pca")
+  if (
+    length(tol) != 1L || is.na(tol) || !is.finite(tol) || tol <= 0 ||
+    length(coverage) != 1L || is.na(coverage) ||
+    coverage <= 0 || coverage >= 1 ||
+    length(min_abs_corr) != 1L || is.na(min_abs_corr) ||
+    min_abs_corr < 0 || min_abs_corr > 1 ||
+    length(mashr_strong_lfsr) != 1L || is.na(mashr_strong_lfsr) ||
+    mashr_strong_lfsr <= 0 || mashr_strong_lfsr >= 1
+  ) {
+    stop("Model numeric thresholds are outside their valid ranges.", call. = FALSE)
+  }
+  if (!is.null(mashr_seed)) {
+    mashr_seed <- as.integer(mashr_seed)
+    if (is.na(mashr_seed)) stop("mashr_seed must be an integer.", call. = FALSE)
+  }
   list(
-    L = as.integer(L),
-    L_greedy = if (is.null(L_greedy)) NULL else as.integer(L_greedy),
+    start_L = start_L,
+    step_L = step_L,
+    max_L = max_L,
     greedy_lbf_cutoff = as.numeric(greedy_lbf_cutoff),
-    max_iter = as.integer(max_iter),
+    max_iter = max_iter,
     tol = as.numeric(tol),
     coverage = as.numeric(coverage),
     min_abs_corr = as.numeric(min_abs_corr),
-    n_thread = as.integer(n_thread),
-    prior_method = prior_method,
-    mashr_n_pca = as.integer(mashr_n_pca),
+    n_thread = n_thread,
+    mashr_n_pca = mashr_n_pca,
     mashr_seed = mashr_seed,
-    mashr_strong_lfsr = as.numeric(mashr_strong_lfsr),
-    mashr_use_ed = isTRUE(mashr_use_ed),
-    estimate_residual_variance = isTRUE(estimate_residual_variance),
-    marginal_output = marginal_output
+    mashr_strong_lfsr = as.numeric(mashr_strong_lfsr)
   )
 }
 
-make_canonical_prior <- function(n_outcomes) {
-  if (length(n_outcomes) != 1L || n_outcomes < 1L) {
-    stop("n_outcomes must be a positive integer.", call. = FALSE)
+validate_prior_for_outcomes <- function(prior, n_outcomes) {
+  if (!inherits(prior, "mash_prior") || !length(prior$xUlist)) {
+    stop("The mvSuSiE prior must be a non-empty mash prior.", call. = FALSE)
   }
-  mvsusieR::create_mixture_prior(R = as.integer(n_outcomes), null_weight = 0)
+  validate_mashr_covariances(prior$xUlist, n_outcomes)
+  if (
+    length(prior$pi) != length(prior$xUlist) ||
+    any(!is.finite(prior$pi)) || any(prior$pi < 0) ||
+    abs(sum(prior$pi) - 1) > 1e-8
+  ) {
+    stop("The mvSuSiE prior has invalid fixed mixture weights.", call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+supported_component_count <- function(single_effect_lfsr, fitted_L) {
+  if (is.null(single_effect_lfsr) || all(is.na(single_effect_lfsr))) return(0L)
+  if (is.matrix(single_effect_lfsr) && nrow(single_effect_lfsr) == fitted_L) {
+    return(sum(apply(single_effect_lfsr < 0.05, 1L, any, na.rm = TRUE)))
+  }
+  if (length(single_effect_lfsr) == fitted_L) {
+    return(sum(single_effect_lfsr < 0.05, na.rm = TRUE))
+  }
+  0L
+}
+
+validate_mvsusie_round <- function(fit, requested_L) {
+  if (!isTRUE(fit$converged)) {
+    stop("The mvSuSiE greedy round did not converge at L = ", requested_L, ".", call. = FALSE)
+  }
+  if (
+    is.null(fit$alpha) || is.null(fit$lbf) ||
+    any(!is.finite(fit$alpha)) || any(!is.finite(fit$lbf))
+  ) {
+    stop("The mvSuSiE greedy round returned non-finite values.", call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+fit_mvsusie_greedy_schedule <- function(
+    X,
+    Y,
+    prior,
+    start_L = 10L,
+    step_L = 5L,
+    max_L = 40L,
+    greedy_lbf_cutoff = 1,
+    fit_fun = mvsusieR::mvsusie,
+    ...
+) {
+  config <- make_model_config(
+    start_L = start_L,
+    step_L = step_L,
+    max_L = max_L,
+    greedy_lbf_cutoff = greedy_lbf_cutoff
+  )
+  validate_prior_for_outcomes(prior, ncol(Y))
+
+  requested_values <- seq.int(
+    config$start_L,
+    config$max_L,
+    by = config$step_L
+  )
+  previous_fit <- NULL
+  history_rows <- vector("list", length(requested_values))
+  completed_rounds <- 0L
+
+  for (round_index in seq_along(requested_values)) {
+    requested_L <- requested_values[[round_index]]
+    pipeline_log(sprintf(
+      "Starting greedy mvSuSiE round %d at L = %d.",
+      round_index, requested_L
+    ))
+    fit <- fit_fun(
+      X = X,
+      Y = Y,
+      L = requested_L,
+      prior_variance = prior,
+      model_init = previous_fit,
+      ...
+    )
+    validate_mvsusie_round(fit, requested_L)
+
+    fitted_L <- as.integer(nrow(fit$alpha))
+    minimum_lbf <- min(as.numeric(fit$lbf))
+    saturated <- minimum_lbf < config$greedy_lbf_cutoff
+    at_maximum <- requested_L == config$max_L
+    action <- if (saturated) {
+      "saturated"
+    } else if (at_maximum) {
+      "maximum"
+    } else {
+      "continue"
+    }
+    credible_set_count <- if (is.null(fit$sets$cs)) 0L else length(fit$sets$cs)
+    history_rows[[round_index]] <- data.table::data.table(
+      round = as.integer(round_index),
+      requested_L = as.integer(requested_L),
+      fitted_L = fitted_L,
+      niter = as.integer(fit$niter),
+      minimum_lbf = minimum_lbf,
+      credible_set_count = as.integer(credible_set_count),
+      supported_component_count = supported_component_count(
+        fit$single_effect_lfsr,
+        fitted_L
+      ),
+      maximum_alpha = max(as.numeric(fit$alpha)),
+      action = action
+    )
+    completed_rounds <- round_index
+    pipeline_log(sprintf(
+      paste(
+        "Greedy round %d complete: fitted L=%d, min lbf=%.6g,",
+        "action=%s."
+      ),
+      round_index, fitted_L, minimum_lbf, action
+    ))
+    previous_fit <- fit
+    if (saturated || at_maximum) break
+  }
+
+  list(
+    fit = previous_fit,
+    history = data.table::rbindlist(history_rows[seq_len(completed_rounds)])
+  )
 }
 
 fit_window_mvsusie <- function(prepared, config) {
-  if (nrow(prepared$X) != nrow(prepared$Y)) {
-    stop("Prepared genotype and phenotype matrices have different sample counts.", call. = FALSE)
+  if (
+    !is.matrix(prepared$X) || !is.matrix(prepared$Y) ||
+    nrow(prepared$X) != nrow(prepared$Y)
+  ) {
+    stop("Prepared genotype and phenotype matrices have incompatible dimensions.", call. = FALSE)
   }
-  prior_details <- if (identical(config$prior_method, "mashr")) {
-    pipeline_log("Preparing all-SNP associations for mashr.")
-    marginal <- compute_marginal_bhat_shat_matrix(prepared$X, prepared$Y)
-    if (!is.null(config$marginal_output)) {
-      write_marginal_association_table(
-        marginal$Bhat,
-        marginal$Shat,
-        config$marginal_output
-      )
-    }
-    learn_mashr_prior(
-      Bhat = marginal$Bhat,
-      Shat = marginal$Shat,
-      n_pca = config$mashr_n_pca,
-      seed = config$mashr_seed,
-      strong_lfsr = config$mashr_strong_lfsr,
-      use_extreme_deconvolution = config$mashr_use_ed
-    )
-  } else {
-    canonical_prior <- make_canonical_prior(ncol(prepared$Y))
-    list(
-      prior = canonical_prior,
-      covariance_training_scope = "not_applicable",
-      covariance_training_n = 0L,
-      extreme_deconvolution_used = FALSE,
-      n_prior_components = length(canonical_prior$xUlist),
-      n_covariance_inputs = length(canonical_prior$xUlist)
-    )
+  if (any(!is.finite(prepared$X)) || any(!is.finite(prepared$Y))) {
+    stop("Prepared genotype and phenotype matrices must be finite.", call. = FALSE)
   }
-  prior <- prior_details$prior
-  fix_mashr_mixture_weights <- identical(config$prior_method, "mashr")
-  prior_scale_conversion <- "not_applicable"
-  prior_outcome_se_range <- c(NA_real_, NA_real_)
-  if (fix_mashr_mixture_weights) {
-    raw_prior_diagonal <- unlist(lapply(prior$xUlist, diag), use.names = FALSE)
-    prior <- prepare_mashr_prior_for_mvsusie(prior, prepared$Y)
-    prior_outcome_se_range <- range(
-      attr(prior, "mvsusie_outcome_se_scale")
-    )
-    prepared_prior_diagonal <- unlist(
-      lapply(prior$xUlist, diag),
-      use.names = FALSE
-    )
-    prior_scale_conversion <- "preserve_mashr_effect_covariance"
-    pipeline_log(sprintf(
-      "Raw mashr prior diagonal range: %.6g to %.6g.",
-      min(raw_prior_diagonal), max(raw_prior_diagonal)
-    ))
-    pipeline_log(sprintf(
-      paste(
-        "Pre-scaled mashr prior diagonal range: %.6g to %.6g;",
-        "mvSuSiE standardization will restore the raw mashr scale."
-      ),
-      min(prepared_prior_diagonal), max(prepared_prior_diagonal)
-    ))
-    pipeline_log("Using the fitted mashr mixture weights without re-estimation.")
+
+  pipeline_log("Computing all-SNP associations for the joint mashr prior.")
+  marginal <- compute_marginal_bhat_shat_matrix(prepared$X, prepared$Y)
+  mashr_training <- learn_joint_mashr_prior(
+    Bhat = marginal$Bhat,
+    Shat = marginal$Shat,
+    n_pca = config$mashr_n_pca,
+    seed = config$mashr_seed,
+    strong_lfsr = config$mashr_strong_lfsr
+  )
+  raw_prior <- mashr_training$raw_prior
+  validate_prior_for_outcomes(raw_prior, ncol(prepared$Y))
+  raw_covariance_values <- unlist(raw_prior$xUlist, use.names = FALSE)
+  prepared_prior <- prepare_mashr_prior_for_mvsusie(raw_prior, prepared$Y)
+  validate_prior_for_outcomes(prepared_prior, ncol(prepared$Y))
+  converted_covariance_values <- unlist(
+    prepared_prior$xUlist,
+    use.names = FALSE
+  )
+  outcome_se <- attr(prepared_prior, "mvsusie_outcome_se_scale")
+  mashr_training$converted_prior <- prepared_prior
+  mashr_training$outcome_se <- outcome_se
+  mashr_training$raw_covariance_range <- range(raw_covariance_values)
+  mashr_training$converted_covariance_range <- range(converted_covariance_values)
+
+  residual_variance <- stats::cov(prepared$Y)
+  if (any(!is.finite(residual_variance))) {
+    stop("The initial residual covariance contains non-finite values.", call. = FALSE)
   }
-  if (!isTRUE(config$estimate_residual_variance)) {
-    pipeline_log("Using the initial residual covariance without re-estimation.")
-  }
-  if (!is.null(config$L_greedy)) {
-    pipeline_log(sprintf(
-      "Using greedy L with step %d, maximum %d, and lbf cutoff %.6g.",
-      config$L_greedy, config$L, config$greedy_lbf_cutoff
-    ))
-  }
+  pipeline_log("Using fixed mashr weights and the fixed initial residual covariance.")
   pipeline_log("Starting mvSuSiE with verbose iteration output.")
-  fit <- mvsusieR::mvsusie(
+  scheduled <- fit_mvsusie_greedy_schedule(
     X = prepared$X,
     Y = prepared$Y,
-    L = config$L,
-    L_greedy = config$L_greedy,
+    prior = prepared_prior,
+    start_L = config$start_L,
+    step_L = config$step_L,
+    max_L = config$max_L,
     greedy_lbf_cutoff = config$greedy_lbf_cutoff,
-    prior_variance = prior,
-    residual_variance = NULL,
+    residual_variance = residual_variance,
     standardize = TRUE,
     intercept = FALSE,
-    estimate_residual_variance = config$estimate_residual_variance,
+    estimate_residual_variance = FALSE,
     estimate_prior_variance = FALSE,
-    estimate_prior_mixture_weights = !fix_mashr_mixture_weights,
+    estimate_prior_mixture_weights = FALSE,
     coverage = config$coverage,
     min_abs_corr = config$min_abs_corr,
     precompute_cache = TRUE,
@@ -153,49 +264,39 @@ fit_window_mvsusie <- function(prepared, config) {
     tol = config$tol,
     verbose = TRUE
   )
-  if (!isTRUE(fit$converged)) {
-    stop(
-      "mvsusie did not converge for window: ",
-      prepared$qc$window_id,
-      call. = FALSE
-    )
-  }
-  pipeline_log(sprintf("mvSuSiE converged after %d iterations.", fit$niter))
+  fit <- scheduled$fit
+  pipeline_log(sprintf(
+    "Final mvSuSiE fit completed at L = %d after %d iterations.",
+    nrow(fit$alpha), fit$niter
+  ))
+
   list(
     fit = fit,
+    greedy_history = scheduled$history,
+    mashr_training = mashr_training,
     metadata = list(
       window_id = prepared$qc$window_id,
-      prior = config$prior_method,
-      prior_components = prior_details$n_prior_components,
-      prior_covariance_inputs = prior_details$n_covariance_inputs,
-      pca_covariance_inputs = prior_details$pca_covariance_inputs,
-      mash_model_training_scope = prior_details$mash_model_training_scope,
-      mash_model_training_n = prior_details$mash_model_training_n,
-      covariance_training_scope = prior_details$covariance_training_scope,
-      covariance_training_n = prior_details$covariance_training_n,
-      covariance_significant_n = prior_details$covariance_significant_n,
-      covariance_selection_lfsr = prior_details$covariance_selection_lfsr,
+      prior = "mashr_pca_only",
+      prior_components = length(prepared_prior$xUlist),
+      pca_requested = mashr_training$pca_requested,
+      pca_returned = mashr_training$pca_returned,
+      mash_model_training_scope = mashr_training$mash_model_training_scope,
+      mash_model_training_n = mashr_training$mash_model_training_n,
+      covariance_training_scope = mashr_training$covariance_training_scope,
+      covariance_training_n = mashr_training$covariance_training_n,
+      covariance_significant_n = mashr_training$covariance_significant_n,
+      covariance_selection_lfsr = mashr_training$covariance_selection_lfsr,
       covariance_selection_fallback_used =
-        prior_details$covariance_selection_fallback_used,
-      extreme_deconvolution_used = prior_details$extreme_deconvolution_used,
-      covariance_input_method = prior_details$covariance_input_method,
-      prior_mixture_weights_mode = if (fix_mashr_mixture_weights) {
-        "fixed_from_mashr"
-      } else {
-        "estimated_by_mvsusie"
-      },
-      prior_scale_conversion = prior_scale_conversion,
-      prior_outcome_se_min = prior_outcome_se_range[[1L]],
-      prior_outcome_se_max = prior_outcome_se_range[[2L]],
-      residual_variance_mode = if (config$estimate_residual_variance) {
-        "estimated_by_mvsusie"
-      } else {
-        "fixed_initial_covariance"
-      },
+        mashr_training$covariance_selection_fallback_used,
+      covariance_input_method = "pca_only",
+      prior_mixture_weights_mode = "fixed_from_mashr",
+      prior_scale_conversion = "preserve_mashr_effect_covariance",
+      prior_outcome_se_min = min(outcome_se),
+      prior_outcome_se_max = max(outcome_se),
+      residual_variance_mode = "fixed_initial_covariance",
       mvsusieR_version = as.character(utils::packageVersion("mvsusieR")),
       config = config,
       L_final = as.integer(nrow(fit$alpha)),
-      L_greedy_used = !is.null(config$L_greedy),
       converged = isTRUE(fit$converged),
       niter = fit$niter
     )
@@ -234,15 +335,26 @@ extract_credible_sets <- function(fit, prepared, config) {
     members <- cs_obj$cs[[i]]
     component <- as.integer(sub("^L", "", names(cs_obj$cs)[[i]]))
     purity_row <- if (is.null(dim(purity))) purity else purity[i, ]
-    purity_values <- suppressWarnings(as.numeric(unlist(purity_row, use.names = FALSE)))
+    purity_values <- suppressWarnings(as.numeric(unlist(
+      purity_row,
+      use.names = FALSE
+    )))
     data.table::data.table(
       component = component,
       variant_id = colnames(prepared$X)[members],
       alpha = as.numeric(fit$alpha[component, members]),
       pip = as.numeric(fit$pip[members]),
       coverage = config$coverage,
-      purity_min = if (length(purity_values)) min(purity_values, na.rm = TRUE) else NA_real_,
-      purity_mean = if (length(purity_values)) mean(purity_values, na.rm = TRUE) else NA_real_
+      purity_min = if (length(purity_values)) {
+        min(purity_values, na.rm = TRUE)
+      } else {
+        NA_real_
+      },
+      purity_mean = if (length(purity_values)) {
+        mean(purity_values, na.rm = TRUE)
+      } else {
+        NA_real_
+      }
     )
   })
   data.table::rbindlist(rows, fill = TRUE)
@@ -252,11 +364,14 @@ extract_component_effects <- function(fit, prepared) {
   mu <- fit$mu
   mu2 <- fit$mu2
   if (length(dim(mu)) != 3L) {
-    stop("Expected mvsusie posterior means with three dimensions.", call. = FALSE)
+    stop("Expected mvSuSiE posterior means with three dimensions.", call. = FALSE)
   }
   dims <- dim(mu)
-  if (!identical(dims[2L], ncol(prepared$X)) || !identical(dims[3L], ncol(prepared$Y))) {
-    stop("Unexpected mvsusie posterior dimension order.", call. = FALSE)
+  if (
+    !identical(dims[2L], ncol(prepared$X)) ||
+    !identical(dims[3L], ncol(prepared$Y))
+  ) {
+    stop("Unexpected mvSuSiE posterior dimension order.", call. = FALSE)
   }
   idx <- expand.grid(
     component = seq_len(dims[1L]),

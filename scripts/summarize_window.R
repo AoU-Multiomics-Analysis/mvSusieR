@@ -55,11 +55,11 @@ qc[, `:=`(
   mvsusieR_version = bundle$metadata$mvsusieR_version,
   prior = bundle$metadata$prior,
   residual_variance_mode = bundle$metadata$residual_variance_mode,
-  L_max = config$L,
-  L_greedy = if (is.null(config$L_greedy)) NA_integer_ else config$L_greedy,
+  start_L = config$start_L,
+  step_L = config$step_L,
+  max_L = config$max_L,
   greedy_lbf_cutoff = config$greedy_lbf_cutoff,
-  L_final = bundle$metadata$L_final,
-  L_greedy_used = bundle$metadata$L_greedy_used
+  L_final = bundle$metadata$L_final
 )]
 
 data.table::fwrite(

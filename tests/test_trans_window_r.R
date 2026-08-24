@@ -360,58 +360,144 @@ source("scripts/trans_window_model.R")
 
 set.seed(1001)
 config <- make_model_config()
-model_X <- matrix(rnorm(50L * 6L), nrow = 50L, ncol = 6L)
+stopifnot(
+  identical(config$start_L, 10L),
+  identical(config$step_L, 5L),
+  identical(config$max_L, 40L),
+  identical(config$greedy_lbf_cutoff, 1),
+  identical(config$mashr_n_pca, 5L),
+  identical(config$mashr_strong_lfsr, 0.05),
+  identical(config$coverage, 0.95),
+  identical(config$min_abs_corr, 0.5)
+)
+stopifnot(!any(c(
+  "prior_method",
+  "mashr_use_ed",
+  "estimate_residual_variance",
+  "marginal_output"
+) %in% names(config)))
+
+model_X <- matrix(rnorm(50L * 20L), nrow = 50L, ncol = 20L)
 model_Y <- matrix(rnorm(50L * 3L), nrow = 50L, ncol = 3L)
-colnames(model_X) <- paste0("variant_", seq_len(ncol(model_X)))
-colnames(model_Y) <- paste0("phenotype_", seq_len(ncol(model_Y)))
-model_prepared <- list(
+recorded_L <- integer()
+recorded_init <- list()
+returned_fits <- list()
+stub_fit <- function(X, Y, L, model_init, ...) {
+  recorded_L <<- c(recorded_L, L)
+  recorded_init[length(recorded_init) + 1L] <<- list(model_init)
+  lbf <- if (L == 10L) rep(2, 10L) else c(rep(2, L - 1L), 0.8)
+  fit <- list(
+    alpha = matrix(1 / ncol(X), nrow = L, ncol = ncol(X)),
+    lbf = stats::setNames(lbf, paste0("L", seq_len(L))),
+    niter = L + 1L,
+    converged = TRUE,
+    sets = list(cs = list(L1 = 1L)),
+    single_effect_lfsr = matrix(0.1, nrow = L, ncol = ncol(Y))
+  )
+  class(fit) <- "mvsusie"
+  returned_fits[[length(returned_fits) + 1L]] <<- fit
+  fit
+}
+
+scheduled <- fit_mvsusie_greedy_schedule(
   X = model_X,
-  Y = scale(model_Y),
-  qc = list(window_id = "synthetic_model")
+  Y = model_Y,
+  prior = mvsusieR::create_mixture_prior(R = 3L, null_weight = 0),
+  start_L = 10L,
+  step_L = 5L,
+  max_L = 40L,
+  greedy_lbf_cutoff = 1,
+  fit_fun = stub_fit
 )
-prior <- make_canonical_prior(ncol(model_prepared$Y))
-stopifnot(inherits(prior, "mash_prior"))
+stopifnot(identical(recorded_L, c(10L, 15L)))
+stopifnot(is.null(recorded_init[[1L]]))
+stopifnot(identical(recorded_init[[2L]], returned_fits[[1L]]))
+stopifnot(identical(scheduled$fit, returned_fits[[2L]]))
+stopifnot(identical(names(scheduled), c("fit", "history")))
+stopifnot(identical(scheduled$history$action, c("continue", "saturated")))
+stopifnot(identical(scheduled$history$requested_L, c(10L, 15L)))
+stopifnot(identical(scheduled$history$minimum_lbf, c(2, 0.8)))
 
-result <- fit_window_mvsusie(model_prepared, config)
-stopifnot(isTRUE(result$fit$converged))
-stopifnot(identical(result$metadata$residual_variance_mode, "estimated_by_mvsusie"))
-
-greedy_config <- make_model_config(
-  L = 4L,
-  L_greedy = 2L,
-  greedy_lbf_cutoff = 1e6
-)
-greedy_result <- fit_window_mvsusie(model_prepared, greedy_config)
-stopifnot(isTRUE(greedy_result$fit$converged))
-stopifnot(nrow(greedy_result$fit$alpha) == 2L)
-stopifnot(identical(greedy_result$metadata$config$L_greedy, 2L))
-stopifnot(identical(greedy_result$metadata$config$greedy_lbf_cutoff, 1e6))
-stopifnot(identical(greedy_result$metadata$L_final, 2L))
-stopifnot(isTRUE(greedy_result$metadata$L_greedy_used))
-
-for (invalid_step in list(0, 2.5, 5, Inf, NaN)) {
-  invalid_greedy_config <- tryCatch(
-    make_model_config(L = 4L, L_greedy = invalid_step),
+for (invalid_config in list(
+  list(start_L = 0L),
+  list(step_L = 0L),
+  list(step_L = 2.5),
+  list(start_L = 20L, max_L = 10L),
+  list(start_L = 10L, step_L = 7L, max_L = 40L),
+  list(greedy_lbf_cutoff = Inf)
+)) {
+  invalid_result <- tryCatch(
+    do.call(make_model_config, invalid_config),
     error = identity
   )
-  stopifnot(inherits(invalid_greedy_config, "error"))
+  stopifnot(inherits(invalid_result, "error"))
 }
 
-for (invalid_cutoff in list(Inf, NaN)) {
-  invalid_greedy_config <- tryCatch(
-    make_model_config(L = 4L, L_greedy = 2L, greedy_lbf_cutoff = invalid_cutoff),
+nonconverged_error <- tryCatch(
+  fit_mvsusie_greedy_schedule(
+    X = model_X,
+    Y = model_Y,
+    prior = mvsusieR::create_mixture_prior(R = 3L, null_weight = 0),
+    fit_fun = function(...) {
+      list(
+        alpha = matrix(0.05, 10L, 20L),
+        lbf = rep(2, 10L),
+        niter = 1L,
+        converged = FALSE
+      )
+    }
+  ),
+  error = identity
+)
+stopifnot(inherits(nonconverged_error, "error"))
+stopifnot(grepl("did not converge", conditionMessage(nonconverged_error)))
+
+nonfinite_error <- tryCatch(
+  fit_mvsusie_greedy_schedule(
+    X = model_X,
+    Y = model_Y,
+    prior = mvsusieR::create_mixture_prior(R = 3L, null_weight = 0),
+    fit_fun = function(...) {
+      list(
+        alpha = matrix(NA_real_, 10L, 20L),
+        lbf = rep(2, 10L),
+        niter = 1L,
+        converged = TRUE
+      )
+    }
+  ),
+  error = identity
+)
+stopifnot(inherits(nonfinite_error, "error"))
+stopifnot(grepl("non-finite", conditionMessage(nonfinite_error)))
+
+maximum_schedule <- fit_mvsusie_greedy_schedule(
+  X = model_X,
+  Y = model_Y,
+  prior = mvsusieR::create_mixture_prior(R = 3L, null_weight = 0),
+  start_L = 10L,
+  step_L = 5L,
+  max_L = 10L,
+  fit_fun = function(X, Y, L, model_init, ...) {
+    list(
+      alpha = matrix(0.05, L, ncol(X)),
+      lbf = rep(2, L),
+      niter = 2L,
+      converged = TRUE,
+      sets = list(cs = NULL),
+      single_effect_lfsr = matrix(0.1, L, ncol(Y))
+    )
+  }
+)
+stopifnot(identical(maximum_schedule$history$action, "maximum"))
+
+bad_prior <- mvsusieR::create_mixture_prior(R = 2L, null_weight = 0)
+prior_dimension_error <- tryCatch(
+  validate_prior_for_outcomes(bad_prior, 3L),
     error = identity
   )
-  stopifnot(inherits(invalid_greedy_config, "error"))
-}
-
-pip <- extract_variant_pips(result$fit, model_prepared)
-stopifnot(all(c("variant_id", "pip") %in% names(pip)))
-credible_sets <- extract_credible_sets(result$fit, model_prepared, config)
-stopifnot(all(c("component", "variant_id", "alpha", "pip") %in% names(credible_sets)))
-component_effects <- extract_component_effects(result$fit, model_prepared)
-stopifnot(all(c("component", "variant_id", "phenotype_id", "posterior_mean") %in% names(component_effects)))
+stopifnot(inherits(prior_dimension_error, "error"))
 
 message("Task 1 reader tests passed")
 message("Task 2 preprocessing tests passed")
-message("Task 3 model tests passed")
+message("Task 3 joint model configuration tests passed")
