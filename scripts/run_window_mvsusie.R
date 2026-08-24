@@ -13,8 +13,9 @@ args <- parse_cli_args(
     optparse::make_option("--window-id", type = "character"),
     optparse::make_option("--dosage", type = "character"),
     optparse::make_option("--phenotype-files", type = "character"),
-    optparse::make_option("--covariate-files", type = "character"),
-    optparse::make_option("--covariate-modalities", type = "character", default = "shared"),
+    optparse::make_option("--expression-covariates", type = "character"),
+    optparse::make_option("--splicing-covariates", type = "character"),
+    optparse::make_option("--protein-covariates", type = "character"),
     optparse::make_option("--keep-samples", type = "character", default = NULL),
     optparse::make_option("--min-nonzero-fraction", type = "double", default = NULL),
     optparse::make_option("--min-genotype-variance", type = "double", default = 1e-8),
@@ -60,10 +61,6 @@ if (nrow(window) != 1L) {
 }
 
 phenotype_files <- split_cli_paths(require_cli_arg(args, "phenotype_files"))
-covariate_files <- split_cli_paths(require_cli_arg(args, "covariate_files"))
-covariate_modalities <- split_cli_paths(
-  optional_cli_arg(args, "covariate_modalities", "shared")
-)
 pipeline_log("Reading genotype data.")
 dosage <- read_wide_dosage(require_cli_arg(args, "dosage"))
 pipeline_log(sprintf(
@@ -77,10 +74,19 @@ pipeline_log(sprintf(
   nrow(phenotype_data$Y), ncol(phenotype_data$Y)
 ))
 pipeline_log("Reading modality-specific covariates.")
-covariates_by_modality <- read_covariate_matrices(
-  paths = covariate_files,
-  modalities = covariate_modalities
+covariates_by_modality <- read_joint_covariates(
+  expression_path = require_cli_arg(args, "expression_covariates"),
+  splicing_path = require_cli_arg(args, "splicing_covariates"),
+  protein_path = require_cli_arg(args, "protein_covariates")
 )
+for (modality in names(covariates_by_modality)) {
+  pipeline_log(sprintf(
+    "%s covariates loaded: %d samples and %d columns.",
+    modality,
+    nrow(covariates_by_modality[[modality]]),
+    ncol(covariates_by_modality[[modality]])
+  ))
+}
 
 min_nonzero_fraction <- optional_cli_arg(args, "min_nonzero_fraction")
 if (!is.null(min_nonzero_fraction)) min_nonzero_fraction <- as.numeric(min_nonzero_fraction)

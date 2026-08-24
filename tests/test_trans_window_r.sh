@@ -27,8 +27,10 @@ Rscript scripts/prepare_window.R \
   --window-phenotypes "$input_dir/window_phenotypes.tsv" \
   --window-id w1 \
   --dosage "$input_dir/model_dosage.tsv" \
-  --phenotype-files "$input_dir/model_expression.tsv,$input_dir/model_splicing.tsv,$input_dir/model_isoform.tsv" \
-  --covariate-files "$input_dir/model_covariates.tsv" \
+  --phenotype-files "$input_dir/model_expression.tsv,$input_dir/model_splicing.tsv,$input_dir/model_protein.tsv" \
+  --expression-covariates "$input_dir/model_expression_covariates.tsv" \
+  --splicing-covariates "$input_dir/model_splicing_covariates.tsv" \
+  --protein-covariates "$input_dir/model_protein_covariates.tsv" \
   --output "$tmp_dir/standalone_prepared_window.rds" \
   2>&1 | tee "$tmp_dir/prepare_window.log"
 
@@ -55,8 +57,10 @@ for invalid_step in 0 2.5 5; do
     --window-phenotypes "$input_dir/window_phenotypes.tsv" \
     --window-id w1 \
     --dosage "$input_dir/model_dosage.tsv" \
-    --phenotype-files "$input_dir/model_expression.tsv,$input_dir/model_splicing.tsv,$input_dir/model_isoform.tsv" \
-    --covariate-files "$input_dir/model_covariates.tsv" \
+    --phenotype-files "$input_dir/model_expression.tsv,$input_dir/model_splicing.tsv,$input_dir/model_protein.tsv" \
+    --expression-covariates "$input_dir/model_expression_covariates.tsv" \
+    --splicing-covariates "$input_dir/model_splicing_covariates.tsv" \
+    --protein-covariates "$input_dir/model_protein_covariates.tsv" \
     --L 4 \
     --L-greedy "$invalid_step" \
     --prepared-output "$tmp_dir/invalid_${invalid_label}_prepared.rds" \
@@ -74,8 +78,10 @@ Rscript scripts/run_window_mvsusie.R \
   --window-phenotypes "$input_dir/window_phenotypes.tsv" \
   --window-id w1 \
   --dosage "$input_dir/model_dosage.tsv" \
-  --phenotype-files "$input_dir/model_expression.tsv,$input_dir/model_splicing.tsv,$input_dir/model_isoform.tsv" \
-  --covariate-files "$input_dir/model_covariates.tsv" \
+  --phenotype-files "$input_dir/model_expression.tsv,$input_dir/model_splicing.tsv,$input_dir/model_protein.tsv" \
+  --expression-covariates "$input_dir/model_expression_covariates.tsv" \
+  --splicing-covariates "$input_dir/model_splicing_covariates.tsv" \
+  --protein-covariates "$input_dir/model_protein_covariates.tsv" \
   --L 4 \
   --L-greedy 2 \
   --greedy-lbf-cutoff 1000000 \
@@ -144,9 +150,9 @@ args <- commandArgs(trailingOnly = TRUE)
 actual <- data.table::fread(args[[1L]], check.names = FALSE)
 expected <- list(
   window_id = "w1", input_samples = 50L, shared_samples = 50L,
-  input_variants = 6L, retained_variants = 6L, excluded_variants = 0L,
-  input_phenotypes = 3L, retained_phenotypes = 3L,
-  excluded_phenotypes = 0L, excluded_samples = 0L, covariate_rank = 4L,
+  input_variants = 12L, retained_variants = 12L, excluded_variants = 0L,
+  input_phenotypes = 6L, retained_phenotypes = 6L,
+  excluded_phenotypes = 0L, excluded_samples = 0L, covariate_rank = 5L,
   L_max = 4L, L_greedy = 2L, greedy_lbf_cutoff = 1e6,
   L_final = 2L, L_greedy_used = TRUE
 )
@@ -192,7 +198,7 @@ RS
 Rscript - "$tmp_dir/marginal_associations.tsv.gz" <<'RS'
 args <- commandArgs(trailingOnly = TRUE)
 associations <- data.table::fread(args[[1L]], check.names = FALSE)
-stopifnot(nrow(associations) == 18L)
+stopifnot(nrow(associations) == 72L)
 stopifnot(identical(
   names(associations),
   c("variant_id", "feature_id", "bhat", "shat", "z", "p_value")

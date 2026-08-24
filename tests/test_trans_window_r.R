@@ -11,6 +11,14 @@ phenotype_manifest <- read_window_phenotypes_manifest(
   fixture("window_phenotypes.tsv")
 )
 stopifnot(nrow(phenotype_manifest) == 3L)
+stopifnot(identical(
+  phenotype_manifest$outcome_key,
+  c(
+    "expression::ENSG000001.1",
+    "splicing::splice_1",
+    "protein::prot_1"
+  )
+))
 
 dosage <- read_wide_dosage(fixture("window_1_dosage.tsv"))
 stopifnot(identical(dim(dosage$X), c(6L, 2L)))
@@ -20,16 +28,10 @@ stopifnot(identical(dosage$variant_ids, c("chr1:101_A_G", "chr1:202_C_T")))
 phenotypes <- read_phenotype_rows(
   fixture("expression.tsv"),
   "expression",
-  "ENSG000001.1"
+  "expression::ENSG000001.1"
 )
 stopifnot(ncol(phenotypes$Y) == 1L, nrow(phenotypes$Y) == 6L)
-stopifnot(identical(colnames(phenotypes$Y), "ENSG000001.1"))
-
-covariates <- read_covariate_matrix(
-  fixture("covariates.tsv")
-)
-stopifnot(identical(dim(covariates), c(6L, 2L)))
-stopifnot(identical(rownames(covariates), as.character(1:6)))
+stopifnot(identical(colnames(phenotypes$Y), "expression::ENSG000001.1"))
 
 numeric_header_covariates_path <- tempfile(fileext = ".tsv")
 writeLines(
@@ -46,20 +48,21 @@ numeric_header_covariates <- read_covariate_file(
 stopifnot(identical(rownames(numeric_header_covariates), c("1001", "1002", "1003")))
 stopifnot(identical(colnames(numeric_header_covariates), c("PC1", "PC2")))
 
-covariates_by_modality <- read_covariate_matrices(
-  paths = c(
-    fixture("covariates.tsv"),
-    fixture("expression_covariates.tsv"),
-    fixture("splicing_covariates.tsv")
-  ),
-  modalities = c("shared", "expression", "splicing")
+covariates_by_modality <- read_joint_covariates(
+  expression_path = fixture("expression_covariates.tsv"),
+  splicing_path = fixture("splicing_covariates.tsv"),
+  protein_path = fixture("protein_covariates.tsv")
 )
-stopifnot(all(c("expression", "splicing", "isoform_usage") %in% names(covariates_by_modality)))
-stopifnot(all(c("COV1", "COV2", "EXPR_COV") %in% colnames(covariates_by_modality$expression)))
-stopifnot(all(c("COV1", "COV2", "SPLICE_COV") %in% colnames(covariates_by_modality$splicing)))
-stopifnot(identical(colnames(covariates_by_modality$isoform_usage), colnames(covariates)))
-
-source("scripts/trans_window_preprocess.R")
+stopifnot(identical(
+  names(covariates_by_modality),
+  c("expression", "splicing", "protein")
+))
+stopifnot(all(vapply(covariates_by_modality, ncol, integer(1L)) == 2L))
+stopifnot(!identical(
+  covariates_by_modality$expression[, "PC1"],
+  covariates_by_modality$splicing[, "PC1"]
+))
+covariates <- covariates_by_modality$expression
 
 phenotype_data <- read_window_phenotypes(
   window_id = "w1",
@@ -67,9 +70,97 @@ phenotype_data <- read_window_phenotypes(
   phenotype_files = c(
     fixture("expression.tsv"),
     fixture("splicing.tsv"),
-    fixture("isoform_usage.tsv")
+    fixture("protein.tsv")
   )
 )
+stopifnot(identical(
+  sort(unique(phenotype_data$modalities)),
+  c("expression", "protein", "splicing")
+))
+stopifnot(identical(
+  phenotype_data$phenotype_ids,
+  phenotype_manifest$outcome_key
+))
+stopifnot(any(grepl("^protein::", phenotype_data$phenotype_ids)))
+stopifnot(identical(
+  phenotype_data$metadata$phenotype_id,
+  phenotype_manifest$phenotype_id
+))
+
+expect_manifest_error <- function(manifest, pattern) {
+  path <- tempfile(fileext = ".tsv")
+  fwrite(manifest, path, sep = "\t")
+  observed <- tryCatch(
+    {
+      read_window_phenotypes_manifest(path)
+      NA_character_
+    },
+    error = function(condition) conditionMessage(condition)
+  )
+  stopifnot(!is.na(observed), grepl(pattern, observed, ignore.case = TRUE))
+}
+
+expect_manifest_error(
+  phenotype_manifest[modality != "protein"],
+  "exactly.*expression.*splicing.*protein"
+)
+isoform_manifest <- copy(phenotype_manifest)
+isoform_manifest$modality[[3L]] <- "isoform_usage"
+isoform_manifest$phenotype_id[[3L]] <- "tx_1"
+isoform_manifest$outcome_key[[3L]] <- "isoform_usage::tx_1"
+expect_manifest_error(
+  isoform_manifest,
+  "exactly.*expression.*splicing.*protein"
+)
+duplicate_outcome_manifest <- rbindlist(list(
+  phenotype_manifest,
+  phenotype_manifest[1L]
+))
+expect_manifest_error(duplicate_outcome_manifest, "duplicate.*outcome")
+
+duplicate_sample_covariates <- tempfile(fileext = ".tsv")
+writeLines(
+  c("covariate\tX1\t1", "PC1\t1\t2"),
+  duplicate_sample_covariates
+)
+duplicate_sample_error <- tryCatch(
+  read_covariate_file(duplicate_sample_covariates),
+  error = identity
+)
+stopifnot(inherits(duplicate_sample_error, "error"))
+stopifnot(grepl(
+  "duplicate sample IDs",
+  conditionMessage(duplicate_sample_error),
+  fixed = TRUE
+))
+
+no_overlap_covariates <- tempfile(fileext = ".tsv")
+writeLines(
+  c("covariate\tZ1\tZ2", "PC1\t1\t2"),
+  no_overlap_covariates
+)
+no_overlap_error <- tryCatch(
+  read_joint_covariates(
+    fixture("expression_covariates.tsv"),
+    fixture("splicing_covariates.tsv"),
+    no_overlap_covariates
+  ),
+  error = identity
+)
+stopifnot(inherits(no_overlap_error, "error"))
+stopifnot(grepl(
+  "no shared sample IDs",
+  conditionMessage(no_overlap_error),
+  fixed = TRUE
+))
+
+# Keep the existing preprocessing tests isolated from the sample-order fix in Task 3.
+covariates_by_modality <- lapply(covariates_by_modality, function(matrix) {
+  matrix[dosage$sample_ids, , drop = FALSE]
+})
+covariates <- covariates_by_modality$expression
+
+source("scripts/trans_window_preprocess.R")
 prepared <- prepare_window_data(
   window = windows[1],
   phenotype_data = phenotype_data,
@@ -89,8 +180,10 @@ prepared_modality <- prepare_window_data(
   dosage = dosage,
   covariates_by_modality = covariates_by_modality
 )
-genotype_covariates <- unique_covariate_columns(
-  lapply(covariates_by_modality, function(matrix) matrix[prepared_modality$samples, , drop = FALSE])
+genotype_covariates <- make_genotype_covariates(
+  lapply(covariates_by_modality, function(matrix) {
+    matrix[prepared_modality$samples, , drop = FALSE]
+  })
 )
 genotype_model <- cbind(genotype_covariates, intercept = 1)
 stopifnot(abs(max(abs(crossprod(genotype_model, prepared_modality$X)))) < 1e-6)
@@ -112,7 +205,7 @@ splicing_pc <- matrix(rep(c(-1, 1), 3L), ncol = 1L,
 conflicting_modality_covariates <- list(
   expression = expression_pc,
   splicing = splicing_pc,
-  isoform_usage = expression_pc
+  protein = expression_pc
 )
 prepared_conflicting_names <- prepare_window_data(
   window = windows[1],
@@ -128,7 +221,7 @@ genotype_conflicting_names <- make_genotype_covariates(
 stopifnot(all(c(
   "expression::PC1",
   "splicing::PC1",
-  "isoform_usage::PC1"
+  "protein::PC1"
 ) %in% colnames(genotype_conflicting_names)))
 stopifnot(identical(
   unname(genotype_conflicting_names[, "expression::PC1"]),
