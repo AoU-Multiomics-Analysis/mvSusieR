@@ -34,6 +34,7 @@ RUN install2.r --error --skipinstalled --ncpus -1 \
     purrr \
     readr \
     remotes \
+    R.utils \
     stringr \
     tibble
 
