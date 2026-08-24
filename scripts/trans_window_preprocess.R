@@ -195,9 +195,14 @@ validate_joint_preprocess_inputs <- function(phenotype_data, covariates_by_modal
   if (length(modalities) != ncol(phenotype_data$Y)) {
     stop("Phenotype modalities must match the phenotype matrix columns.", call. = FALSE)
   }
-  if (!identical(sort(unique(modalities)), sort(required_joint_modalities()))) {
+  if (!length(modalities)) {
+    stop("Prepared phenotypes must contain at least one outcome.", call. = FALSE)
+  }
+  unsupported <- setdiff(unique(modalities), required_joint_modalities())
+  if (length(unsupported)) {
     stop(
-      "Prepared phenotypes must contain every required joint modality.",
+      "Prepared phenotypes contain an unsupported modality: ",
+      paste(unsupported, collapse = ", "),
       call. = FALSE
     )
   }
@@ -327,7 +332,14 @@ prepare_joint_window_data <- function(
   for (modality in required_joint_modalities()) {
     indices <- which(phenotype_modalities == modality)
     if (!length(indices)) {
-      stop("No retained outcomes remain for modality: ", modality, call. = FALSE)
+      preprocess_log(sprintf(
+        paste(
+          "No %s outcomes were selected for this window;",
+          "skipping phenotype residualization."
+        ),
+        modality
+      ))
+      next
     }
     preprocess_log(sprintf(
       "Residualizing %d %s outcomes against %d covariates.",
@@ -364,13 +376,6 @@ prepare_joint_window_data <- function(
   Y_resid <- Y_resid[, keep_phenotype_resid, drop = FALSE]
   phenotype_modalities <- phenotype_modalities[keep_phenotype_resid]
   phenotype_metadata <- phenotype_metadata[keep_phenotype_resid]
-  if (!identical(
-    sort(unique(phenotype_modalities)),
-    sort(required_joint_modalities())
-  )) {
-    stop("At least one required modality has no usable outcomes.", call. = FALSE)
-  }
-
   preprocess_log("Centering and scaling each residualized outcome to unit variance.")
   Y_scaled <- scale(Y_resid, center = TRUE, scale = TRUE)
   colnames(Y_scaled) <- colnames(Y_resid)

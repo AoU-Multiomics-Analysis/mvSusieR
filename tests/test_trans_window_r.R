@@ -100,17 +100,22 @@ expect_manifest_error <- function(manifest, pattern) {
   stopifnot(!is.na(observed), grepl(pattern, observed, ignore.case = TRUE))
 }
 
-expect_manifest_error(
-  phenotype_manifest[modality != "protein"],
-  "exactly.*expression.*splicing.*protein"
-)
+protein_missing_manifest <- phenotype_manifest[modality != "protein"]
+protein_missing_path <- tempfile(fileext = ".tsv")
+fwrite(protein_missing_manifest, protein_missing_path, sep = "\t")
+protein_missing_read <- read_window_phenotypes_manifest(protein_missing_path)
+stopifnot(identical(
+  sort(unique(protein_missing_read$modality)),
+  c("expression", "splicing")
+))
+expect_manifest_error(phenotype_manifest[0L], "at least one outcome")
 isoform_manifest <- copy(phenotype_manifest)
 isoform_manifest$modality[[3L]] <- "isoform_usage"
 isoform_manifest$phenotype_id[[3L]] <- "tx_1"
 isoform_manifest$outcome_key[[3L]] <- "isoform_usage::tx_1"
 expect_manifest_error(
   isoform_manifest,
-  "exactly.*expression.*splicing.*protein"
+  "unsupported.*modality"
 )
 duplicate_outcome_manifest <- rbindlist(list(
   phenotype_manifest,
@@ -257,6 +262,30 @@ stopifnot(all(is.finite(prepared$X)), all(is.finite(prepared$Y)))
 stopifnot(prepared$covariate_rank >= 1L)
 stopifnot("modality" %in% names(phenotype_data$metadata))
 stopifnot("modality" %in% names(prepared$phenotype_metadata))
+
+for (missing_modality in required_joint_modalities()) {
+  keep <- phenotype_data$modalities != missing_modality
+  subset_data <- phenotype_data
+  subset_data$Y <- phenotype_data$Y[, keep, drop = FALSE]
+  subset_data$metadata <- data.table::copy(phenotype_data$metadata[keep])
+  subset_data$phenotype_ids <- phenotype_data$phenotype_ids[keep]
+  subset_data$modalities <- phenotype_data$modalities[keep]
+  subset_prepared <- prepare_joint_window_data(
+    window = windows[1],
+    phenotype_data = subset_data,
+    dosage = dosage,
+    covariates_by_modality = raw_covariates_by_modality
+  )
+  stopifnot(!missing_modality %in% subset_prepared$phenotype_metadata$modality)
+  stopifnot(identical(
+    subset_prepared$phenotype_covariate_rank[[missing_modality]],
+    0L
+  ))
+  stopifnot(identical(
+    colnames(subset_prepared$genotype_covariates),
+    c("expression::PC1", "SHARED", "splicing::PC1", "protein::PC1")
+  ))
+}
 
 genotype_model <- cbind(prepared$genotype_covariates, intercept = 1)
 stopifnot(abs(max(abs(crossprod(genotype_model, prepared$X)))) < 1e-6)

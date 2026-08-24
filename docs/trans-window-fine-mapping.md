@@ -32,7 +32,11 @@ window_id  outcome_key  phenotype_id  modality  phenotype_file
 ```
 
 `outcome_key` has the form `modality::phenotype_id`. This key prevents name
-collisions between modalities.
+collisions between modalities. A window can retain any nonempty subset of the
+three supported modalities. A top-N value is a maximum, not a minimum. Thus,
+a modality can contribute fewer than N outcomes or no outcomes in a window.
+The workflow rejects a window only when it has no usable outcomes from any
+modality.
 
 ## Preprocess the joint data
 
@@ -44,10 +48,11 @@ requires one combined phenotype file and three explicit covariate files:
 - `protein_covariates`
 
 The workflow keeps samples present in the genotype, phenotype, and all three
-covariate inputs. It removes samples with non-finite values. It applies a
-rank-based inverse-normal transform to each outcome. It then regresses each
-outcome on the covariates for its own modality and scales the residual to unit
-variance.
+covariate inputs. All three source phenotype and covariate files remain global
+workflow inputs, even when one modality has no outcomes in a given window. It
+removes samples with non-finite values. It applies a rank-based inverse-normal
+transform to each outcome. It then regresses each present outcome on the
+covariates for its own modality and scales the residual to unit variance.
 
 The genotype matrix uses the aligned union of all expression, splicing, and
 protein covariates. If two covariates have the same name and values, the
@@ -61,8 +66,11 @@ decision and an MD5 checksum for each source column to
 The workflow calculates `Bhat` and `Shat` for every retained SNP and every
 joint outcome with matrix operations. It uses a one-by-one mashr fit to select
 strong SNP rows at lfsr 0.05. If fewer than five rows pass, it uses the five
-rows with the smallest lfsr values. It calls `mashr::cov_pca` with `npc = 5`
-on these rows. It then fits the mash mixture on all retained SNPs.
+rows with the smallest lfsr values. It requests five PCA covariance matrices,
+but limits the count to the number of outcomes and selected SNP rows. For one
+outcome, it uses the equivalent one-dimensional covariance because PCA cannot
+add extra covariance directions. It then fits the mash mixture on all retained
+SNPs.
 
 The workflow supplies only the PCA covariance matrices to mashr. It does not
 add another covariance family. It keeps the fitted mash mixture weights for

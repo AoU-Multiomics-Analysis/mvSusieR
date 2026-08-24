@@ -46,10 +46,10 @@ the requested target expression and splicing features.
 ### Trans-window multivariate fine-mapping
 
 [`TransWindowMvSusie`](workflows/trans_window_mvsusie.wdl) fits mvSuSiE across
-trans windows using expression, splicing, and protein outcomes in one joint
-model. It uses a PCA-only mashr prior, a greedy component schedule, and fixed
-residual covariance. It writes variant PIPs, credible sets, feature support,
-API-scale effect plots, and window QC. See the
+trans windows using any nonempty subset of expression, splicing, and protein
+outcomes in one joint model. It uses a PCA-derived mashr prior, a greedy
+component schedule, and fixed residual covariance. It writes variant PIPs,
+credible sets, feature support, API-scale effect plots, and window QC. See the
 [trans-window fine-mapping guide](docs/trans-window-fine-mapping.md).
 
 ### LD pruning

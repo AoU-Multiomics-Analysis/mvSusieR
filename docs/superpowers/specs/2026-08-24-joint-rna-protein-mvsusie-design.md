@@ -2,17 +2,17 @@
 
 ## Goal
 
-Replace the modality-flexible trans-window path with one production workflow that jointly fine-maps expression, splicing, and protein outcomes. The workflow must apply one preprocessing contract, learn one data-driven mashr prior from the full locus genotype matrix, and run one joint mvSuSiE model with a reproducible greedy effect-count schedule.
+Replace the old trans-window path with one production workflow that jointly fine-maps available expression, splicing, and protein outcomes. The workflow must apply one preprocessing contract, learn one data-driven mashr prior from the full locus genotype matrix, and run one joint mvSuSiE model with a reproducible greedy effect-count schedule.
 
 ## Scope
 
-The workflow requires all three modalities:
+The workflow supports these three modalities:
 
 - `expression`
 - `splicing`
 - `protein`
 
-The workflow does not support RNA-only, protein-only, or `isoform_usage` analyses. The change is intentionally breaking. The manifests, command-line interfaces, WDL inputs, fixtures, documentation, and tests will reject missing, extra, or duplicated modalities.
+All three source phenotype files and all three covariate files are required as global workflow inputs. An individual window can contain any nonempty subset of the supported modalities. The workflow does not support `isoform_usage`. It rejects unsupported or duplicated modalities and rejects a window only when no usable outcomes remain.
 
 The workflow supports one locus window per model task. It keeps every usable SNP in that window. It selects trans outcomes separately by modality and adds explicit target-gene expression and splicing outcomes.
 
@@ -32,7 +32,7 @@ The workflow supports one locus window per model task. It keeps every usable SNP
 
 The three phenotype files use the same BED-like layout: chromosome, zero-based start, half-open end, phenotype ID, then one column per sample. `target_phenotypes` is a TSV with `window_id`, `modality`, and `phenotype_id`. Target rows may use only `expression` or `splicing`. Every requested target must exist exactly once in its source phenotype file.
 
-The trans-association table must contain expression, splicing, and protein rows for the requested window. The preparation task ranks the minimum p-value per phenotype within each modality, selects the requested number, adds the explicit target rows, and removes duplicate phenotype selections. It fails if a modality has fewer eligible trans phenotypes than requested.
+The trans-association table can contain any subset of expression, splicing, and protein rows for the requested window. The preparation task ranks the minimum p-value per phenotype within each modality, selects up to the requested number, adds the explicit target rows, and removes duplicate phenotype selections. A modality can contribute zero outcomes. Preparation fails only when the complete window has no usable outcomes.
 
 The output phenotype manifest stores both the original `phenotype_id` and a unique `outcome_key` formed as `modality::phenotype_id`. Internal matrices and model outputs use `outcome_key`. User-facing tables retain the modality and original phenotype ID.
 
@@ -47,7 +47,7 @@ The output phenotype manifest stores both the original `phenotype_id` and a uniq
 The model workflow will not accept generic modality arrays. Its production defaults are:
 
 - mashr prior;
-- five requested PCA factors (`npc = 5`), with the returned covariance count recorded;
+- five requested PCA factors, limited by the available outcomes and selected SNP rows, with requested and used counts recorded;
 - strong-row threshold lfsr of 0.05;
 - extreme deconvolution disabled;
 - canonical covariance matrices disabled;
@@ -203,7 +203,7 @@ The container smoke test verifies the installed commit metadata or an equivalent
 
 ## Test and automation strategy
 
-Tests use one synthetic joint fixture with expression, splicing, and protein outcomes. The fixture includes:
+Tests use one synthetic joint fixture with expression, splicing, and protein outcomes. They also test windows that omit each modality in turn. The fixture includes:
 
 - different sample order in each input;
 - different `PC1` values for all three modalities;
@@ -216,12 +216,12 @@ Tests use one synthetic joint fixture with expression, splicing, and protein out
 
 The R tests verify exact sample intersection and order, outcome keys, per-modality selection counts, correct phenotype residualization, genotype residualization against the full covariate union, phenotype unit variance, variant filtering, mash scale round-trip, fixed mixture weights, fixed residual covariance, greedy warm starts, the `1.0` stopping threshold, final-only fit storage, summary tables, and mvSuSiE API plot creation.
 
-Negative tests verify rejection of missing modalities, `isoform_usage`, duplicate IDs, missing targets, mismatched covariate samples, and invalid greedy settings.
+Negative tests verify rejection of an empty outcome set, `isoform_usage`, duplicate IDs, missing targets, mismatched covariate samples, and invalid greedy settings.
 
 WDL tests validate explicit joint inputs, per-modality top counts, production defaults, command logging, outputs, and runtime settings. GitHub Actions runs R lint, R integration tests, WDL validation, and the model-container smoke test. No local Docker build is required.
 
 ## Migration
 
-The existing production preparation and model workflow names remain stable, but their interfaces become joint-only. Documentation and examples will show the required expression, splicing, and protein inputs. Old RNA-only and isoform-usage inputs will fail validation instead of receiving compatibility shims.
+The existing production preparation and model workflow names remain stable. Documentation and examples show the required expression, splicing, and protein source inputs. A window can use one, two, or three of these modalities. Isoform-usage inputs fail validation.
 
 The joint workflow supersedes the standalone exploratory scripts used for the IKZF1 and CREB5 protein comparisons. Those analysis outputs remain outside the repository and are not added to Git.

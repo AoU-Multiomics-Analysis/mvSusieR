@@ -97,15 +97,61 @@ stopifnot(sum(overlap_manifest$outcome_key == "expression::expr_27") == 1L)
 
 missing_modality <- trans_associations |>
   filter(.data$modality != "protein")
-expect_error_matching(
-  prepare_trans_window_data(
-    "w1", missing_modality,
-    fixture("expression.bed.gz"), fixture("splicing.bed.gz"),
-    fixture("protein.bed.gz"), fixture("target_phenotypes.tsv"),
-    fixture("missing_modality")
-  ),
-  "exactly.*expression.*splicing.*protein"
+missing_protein_result <- prepare_trans_window_data(
+  "w1", missing_modality,
+  fixture("expression.bed.gz"), fixture("splicing.bed.gz"),
+  fixture("protein.bed.gz"), fixture("target_phenotypes.tsv"),
+  fixture("missing_protein")
 )
+missing_protein_manifest <- read_tsv(
+  missing_protein_result$window_phenotypes,
+  show_col_types = FALSE
+)
+stopifnot(!"protein" %in% missing_protein_manifest$modality)
+missing_protein_qc <- read_tsv(
+  missing_protein_result$window_qc,
+  show_col_types = FALSE
+)
+stopifnot(
+  missing_protein_qc$n_trans_selected[missing_protein_qc$modality == "protein"] == 0L
+)
+
+single_target_path <- fixture("single_expression_target.tsv")
+write_tsv(
+  tibble(window_id = "w1", modality = "expression", phenotype_id = "expr_target"),
+  single_target_path
+)
+missing_splicing_result <- prepare_trans_window_data(
+  "w1", filter(trans_associations, .data$modality != "splicing"),
+  fixture("expression.bed.gz"), fixture("splicing.bed.gz"),
+  fixture("protein.bed.gz"), single_target_path,
+  fixture("missing_splicing")
+)
+missing_splicing_manifest <- read_tsv(
+  missing_splicing_result$window_phenotypes,
+  show_col_types = FALSE
+)
+stopifnot(!"splicing" %in% missing_splicing_manifest$modality)
+
+single_splicing_target_path <- fixture("single_splicing_target.tsv")
+write_tsv(
+  tibble(
+    window_id = "w1", modality = "splicing",
+    phenotype_id = "splice_target_1"
+  ),
+  single_splicing_target_path
+)
+missing_expression_result <- prepare_trans_window_data(
+  "w1", filter(trans_associations, .data$modality != "expression"),
+  fixture("expression.bed.gz"), fixture("splicing.bed.gz"),
+  fixture("protein.bed.gz"), single_splicing_target_path,
+  fixture("missing_expression")
+)
+missing_expression_manifest <- read_tsv(
+  missing_expression_result$window_phenotypes,
+  show_col_types = FALSE
+)
+stopifnot(!"expression" %in% missing_expression_manifest$modality)
 
 isoform_associations <- trans_associations
 isoform_associations$modality[[1L]] <- "isoform_usage"
@@ -116,7 +162,7 @@ expect_error_matching(
     fixture("protein.bed.gz"), fixture("target_phenotypes.tsv"),
     fixture("isoform")
   ),
-  "exactly.*expression.*splicing.*protein"
+  "unsupported.*modality"
 )
 
 missing_target_path <- fixture("missing_target.tsv")

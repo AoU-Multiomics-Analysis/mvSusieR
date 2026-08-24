@@ -38,15 +38,18 @@ rg -q 'residualize_matrix' "$preprocess_script"
 
 rg -q 'compute_marginal_bhat_shat_matrix' "$model_script"
 rg -q 'cov_pca_fun' "$prior_script"
-rg -q 'npc = n_pca' "$prior_script"
+rg -q 'pca_used <- min' "$prior_script"
+rg -q 'npc = pca_used' "$prior_script"
 rg -q 'mash_model_training_scope = "all_snps_in_window"' "$prior_script"
-rg -q 'covariance_input_method = "pca_only"' "$prior_script"
+rg -q 'covariance_input_method <- "pca_only"' "$prior_script"
+rg -q 'covariance_input_method <- "univariate_pca_equivalent"' "$prior_script"
 rg -q 'prior[$]xUlist <- lapply' "$prior_script"
 rg -q 'U / automatic_scale' "$prior_script"
 rg -q 'estimate_residual_variance = FALSE' "$model_script"
 rg -q 'estimate_prior_variance = FALSE' "$model_script"
 rg -q 'estimate_prior_mixture_weights = FALSE' "$model_script"
 rg -q 'verbose = TRUE' "$model_script"
+rg -q 'covariance_input_method = mashr_training[$]covariance_input_method' "$model_script"
 
 for default in \
   'start_L = 10L' \
