@@ -20,6 +20,7 @@ RUN apt-get update \
         libharfbuzz-dev \
         libjpeg-dev \
         libpng-dev \
+        ripgrep \
         libssl-dev \
         libtiff5-dev \
         libxml2-dev \
