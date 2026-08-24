@@ -10,15 +10,18 @@ workflow=".github/workflows/trans-window-mvsusie-image.yml"
 test -s "$dockerfile"
 test -s "$workflow"
 rg -q '^FROM rocker/r-ver:4[.]4[.]1$' "$dockerfile"
-rg -q 'stephenslab/mvsusieR' "$dockerfile"
-rg -q 'stephenslab/susieR' "$dockerfile"
+rg -q '65f3586a865fb6748cb4f9df50510ac577706348' "$dockerfile"
+rg -q 'ebd1133953005fa70c6b338727b5fe9222e2a1c2' "$dockerfile"
 rg -q 'mashr' "$dockerfile"
-rg -q 'install_url' "$dockerfile"
-rg -q 'mvsusieR.*0[.]3[.]0' "$workflow"
-rg -q 'susieR.*0[.]15[.]54' "$workflow"
-rg -q 'formals[(]mvsusieR::mvsusie[)]' "$workflow"
-rg -q 'L_greedy' "$workflow"
-rg -q 'greedy_lbf_cutoff' "$workflow"
+rg -q 'ggplot2' "$dockerfile"
+rg -q 'ripgrep' "$dockerfile"
+rg -q 'install_github' "$dockerfile"
+for package in dplyr purrr readr R.utils stringr tibble; do
+  rg -q "    ${package}" "$dockerfile"
+done
+rg -q 'RemoteSha.*65f3586a865fb6748cb4f9df50510ac577706348' "$workflow"
+rg -q 'RemoteSha.*ebd1133953005fa70c6b338727b5fe9222e2a1c2' "$workflow"
+rg -q 'mvsusie_plot' "$workflow"
 
 for script in \
   trans_window_io.R \
@@ -30,7 +33,8 @@ for script in \
   fit_window.R \
   run_window_mvsusie.R \
   summarize_window.R \
-  merge_window_outputs.R; do
+  merge_window_outputs.R \
+  plot_window_mvsusie.R; do
   rg -q "scripts/${script}" "$dockerfile"
   rg -q "scripts/${script}" "$workflow"
 done

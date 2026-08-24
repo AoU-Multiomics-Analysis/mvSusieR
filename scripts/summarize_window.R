@@ -33,18 +33,32 @@ data.table::setcolorder(
   c("window_id", "variant_id", "CHROM", "POS", "REF", "ALT", "pip")
 )
 
-credible_sets <- extract_credible_sets(bundle$fit, prepared, config)
+credible_set_tables <- extract_credible_set_tables(bundle$fit, prepared, config)
+credible_sets <- credible_set_tables$summary
 credible_sets[, window_id := window_id]
 data.table::setcolorder(
   credible_sets,
-  c("window_id", "component", "variant_id", "alpha", "pip", "coverage", "purity_min", "purity_mean")
+  c(
+    "window_id", "component", "credible_set_size", "sentinel_variant_id",
+    "sentinel_alpha", "coverage", "purity_min", "purity_mean"
+  )
 )
 
-effects <- extract_component_effects(bundle$fit, prepared)
-effects[, window_id := window_id]
+credible_set_members <- credible_set_tables$members
+credible_set_members[, window_id := window_id]
 data.table::setcolorder(
-  effects,
-  c("window_id", "component", "variant_id", "phenotype_id", "posterior_mean", "posterior_sd")
+  credible_set_members,
+  c("window_id", "component", "variant_id", "alpha", "pip", "is_sentinel")
+)
+
+component_feature_support <- extract_component_feature_support(bundle$fit, prepared)
+component_feature_support[, window_id := window_id]
+data.table::setcolorder(
+  component_feature_support,
+  c(
+    "window_id", "component", "outcome_key", "modality", "phenotype_id",
+    "single_effect_lfsr", "outcome_lbf"
+  )
 )
 
 qc <- data.table::as.data.table(prepared$qc)
@@ -55,11 +69,11 @@ qc[, `:=`(
   mvsusieR_version = bundle$metadata$mvsusieR_version,
   prior = bundle$metadata$prior,
   residual_variance_mode = bundle$metadata$residual_variance_mode,
-  L_max = config$L,
-  L_greedy = if (is.null(config$L_greedy)) NA_integer_ else config$L_greedy,
+  start_L = config$start_L,
+  step_L = config$step_L,
+  max_L = config$max_L,
   greedy_lbf_cutoff = config$greedy_lbf_cutoff,
-  L_final = bundle$metadata$L_final,
-  L_greedy_used = bundle$metadata$L_greedy_used
+  L_final = bundle$metadata$L_final
 )]
 
 data.table::fwrite(
@@ -75,8 +89,14 @@ data.table::fwrite(
   compress = "gzip"
 )
 data.table::fwrite(
-  effects,
-  file.path(output_dir, "component_effects.tsv.gz"),
+  credible_set_members,
+  file.path(output_dir, "credible_set_members.tsv.gz"),
+  sep = "\t",
+  compress = "gzip"
+)
+data.table::fwrite(
+  component_feature_support,
+  file.path(output_dir, "component_feature_support.tsv.gz"),
   sep = "\t",
   compress = "gzip"
 )

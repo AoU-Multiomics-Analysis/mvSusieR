@@ -5,6 +5,10 @@ normalize_sample_ids <- function(ids) {
   sub("^X(?=[0-9])", "", ids, perl = TRUE)
 }
 
+required_joint_modalities <- function() {
+  c("expression", "splicing", "protein")
+}
+
 require_columns <- function(dt, required, label) {
   missing <- setdiff(required, names(dt))
   if (length(missing)) {
@@ -38,20 +42,32 @@ read_window_phenotypes_manifest <- function(path) {
   dt <- fread(path, check.names = FALSE)
   require_columns(
     dt,
-    c("window_id", "phenotype_id", "modality", "phenotype_file"),
+    c("window_id", "outcome_key", "phenotype_id", "modality", "phenotype_file"),
     "Window phenotype manifest"
   )
-  if (anyDuplicated(dt[, paste(window_id, phenotype_id, sep = "\r")])) {
+  if (anyDuplicated(dt[, paste(window_id, outcome_key, sep = "\r")])) {
     stop(
-      "Window phenotype manifest contains duplicate window_id/phenotype_id pairs.",
+      "Window phenotype manifest contains duplicate window_id/outcome_key pairs.",
       call. = FALSE
     )
   }
-  allowed <- c("expression", "splicing", "isoform_usage")
-  if (any(!dt$modality %in% allowed)) {
+  expected_outcome_keys <- paste(dt$modality, dt$phenotype_id, sep = "::")
+  if (any(dt$outcome_key != expected_outcome_keys)) {
     stop(
-      "Unsupported phenotype modality. Expected one of: ",
-      paste(allowed, collapse = ", "),
+      "Each outcome_key must equal modality::phenotype_id.",
+      call. = FALSE
+    )
+  }
+  expected_modalities <- sort(required_joint_modalities())
+  modalities_by_window <- split(as.character(dt$modality), dt$window_id)
+  invalid_windows <- names(Filter(function(modalities) {
+    !identical(sort(unique(modalities)), expected_modalities)
+  }, modalities_by_window))
+  if (length(invalid_windows)) {
+    stop(
+      "Every window phenotype manifest must contain exactly: ",
+      paste(required_joint_modalities(), collapse = ", "),
+      ". Invalid windows: ", paste(invalid_windows, collapse = ", "),
       call. = FALSE
     )
   }
@@ -95,11 +111,8 @@ read_wide_dosage <- function(path) {
 }
 
 phenotype_layout <- function(modality) {
-  if (modality %in% c("expression", "splicing")) {
+  if (modality %in% required_joint_modalities()) {
     return(list(id_column = 4L, metadata_columns = 1:4))
-  }
-  if (identical(modality, "isoform_usage")) {
-    return(list(id_column = 1L, metadata_columns = 1:2))
   }
   stop("Unsupported phenotype modality: ", modality, call. = FALSE)
 }
@@ -170,19 +183,10 @@ read_window_phenotypes <- function(window_id, phenotype_manifest, phenotype_file
   parts <- lapply(grouped_rows, function(indices) {
     source_file <- resolve_file_reference(rows$phenotype_file[[indices[[1L]]]], phenotype_files)
     modalities <- as.character(rows$modality[indices])
-    if (
-      length(unique(modalities)) > 1L &&
-      any(!modalities %in% c("expression", "splicing"))
-    ) {
-      stop(
-        "A combined phenotype file may only mix expression and splicing layouts.",
-        call. = FALSE
-      )
-    }
     data <- read_phenotype_rows(
       source_file,
       modalities[[1L]],
-      rows$phenotype_id[indices]
+      rows$outcome_key[indices]
     )
     data$metadata[, modality := modalities]
     list(indices = indices, data = data)
@@ -196,14 +200,13 @@ read_window_phenotypes <- function(window_id, phenotype_manifest, phenotype_file
   }))
   column_order <- order(unlist(lapply(parts, `[[`, "indices")))
   Y <- Y[, column_order, drop = FALSE]
-  metadata <- rbindlist(lapply(parts, function(part) part$data$metadata), fill = TRUE)
-  metadata <- metadata[column_order]
+  metadata <- copy(rows)
   list(
     Y = Y,
     metadata = metadata,
     sample_ids = common_samples,
-    phenotype_ids = colnames(Y),
-    modalities = rows$modality,
+    phenotype_ids = as.character(rows$outcome_key),
+    modalities = as.character(rows$modality),
     source_files = rows$phenotype_file
   )
 }
@@ -235,6 +238,27 @@ read_covariate_file <- function(path) {
   values
 }
 
+read_joint_covariates <- function(
+    expression_path,
+    splicing_path,
+    protein_path
+) {
+  paths <- c(
+    expression = expression_path,
+    splicing = splicing_path,
+    protein = protein_path
+  )
+  if (any(!file.exists(paths))) {
+    stop("Every joint covariate file must exist.", call. = FALSE)
+  }
+  result <- lapply(paths, read_covariate_file)
+  shared_samples <- Reduce(intersect, lapply(result, rownames))
+  if (!length(shared_samples)) {
+    stop("Joint covariate files have no shared sample IDs.", call. = FALSE)
+  }
+  result
+}
+
 unique_covariate_columns <- function(matrices) {
   if (!length(matrices)) stop("At least one covariate matrix is required.", call. = FALSE)
   sample_ids <- rownames(matrices[[1L]])
@@ -263,42 +287,4 @@ unique_covariate_columns <- function(matrices) {
     }
   }
   output
-}
-
-read_covariate_matrices <- function(paths, modalities = rep("shared", length(paths))) {
-  paths <- as.character(paths)
-  if (!length(paths)) stop("At least one covariate file is required.", call. = FALSE)
-  modalities <- as.character(modalities)
-  if (length(modalities) != length(paths)) {
-    stop("The number of covariate modalities must match the number of files.", call. = FALSE)
-  }
-  allowed <- c("shared", "expression", "splicing", "isoform_usage")
-  if (any(!modalities %in% allowed)) {
-    stop(
-      "Unsupported covariate modality. Expected one of: ",
-      paste(allowed, collapse = ", "),
-      call. = FALSE
-    )
-  }
-  matrices <- lapply(paths, read_covariate_file)
-  sample_ids <- rownames(matrices[[1L]])
-  for (i in seq_along(matrices)[-1L]) {
-    if (!all(sample_ids %in% rownames(matrices[[i]]))) {
-      stop("Covariate files do not contain the same sample IDs.", call. = FALSE)
-    }
-    matrices[[i]] <- matrices[[i]][sample_ids, , drop = FALSE]
-  }
-  phenotype_modalities <- c("expression", "splicing", "isoform_usage")
-  setNames(lapply(phenotype_modalities, function(modality) {
-    selected <- matrices[modalities %in% c("shared", modality)]
-    if (!length(selected)) {
-      stop("No covariates supplied for modality: ", modality, call. = FALSE)
-    }
-    unique_covariate_columns(selected)
-  }), phenotype_modalities)
-}
-
-read_covariate_matrix <- function(paths) {
-  paths <- as.character(paths)
-  read_covariate_matrices(paths, rep("shared", length(paths)))$expression
 }

@@ -20,6 +20,7 @@ RUN apt-get update \
         libharfbuzz-dev \
         libjpeg-dev \
         libpng-dev \
+        ripgrep \
         libssl-dev \
         libtiff5-dev \
         libxml2-dev \
@@ -27,16 +28,21 @@ RUN apt-get update \
 
 RUN install2.r --error --skipinstalled --ncpus -1 \
     data.table \
+    dplyr \
+    ggplot2 \
     optparse \
-    remotes
+    purrr \
+    readr \
+    remotes \
+    R.utils \
+    stringr \
+    tibble
 
-# mvsusieR 0.3.0 requires susieR >= 0.15.54. Install the current master
-# tarballs directly and request only runtime dependencies; installing Suggests
-# would add unnecessary documentation and test-toolchain dependencies.
-RUN Rscript -e 'remotes::install_url("https://github.com/stephenslab/susieR/archive/refs/heads/master.tar.gz", dependencies = c("Depends", "Imports", "LinkingTo"), upgrade = "never")' \
+# Install exact source revisions. Do not install suggested documentation and test packages.
+RUN Rscript -e 'remotes::install_github("stephenslab/susieR@65f3586a865fb6748cb4f9df50510ac577706348", dependencies = c("Depends", "Imports", "LinkingTo"), upgrade = "never")' \
     && Rscript -e 'install.packages("mashr", repos = "https://cloud.r-project.org")' \
-    && Rscript -e 'remotes::install_url("https://github.com/stephenslab/mvsusieR/archive/refs/heads/master.tar.gz", dependencies = c("Depends", "Imports", "LinkingTo"), upgrade = "never")' \
-    && Rscript -e 'stopifnot(requireNamespace("mashr", quietly = TRUE), utils::packageVersion("mvsusieR") >= "0.3.0", utils::packageVersion("susieR") >= "0.15.54")'
+    && Rscript -e 'remotes::install_github("stephenslab/mvsusieR@ebd1133953005fa70c6b338727b5fe9222e2a1c2", dependencies = c("Depends", "Imports", "LinkingTo"), upgrade = "never")' \
+    && Rscript -e 'stopifnot(requireNamespace("ggplot2", quietly = TRUE), requireNamespace("mashr", quietly = TRUE), packageDescription("susieR")$RemoteSha == "65f3586a865fb6748cb4f9df50510ac577706348", packageDescription("mvsusieR")$RemoteSha == "ebd1133953005fa70c6b338727b5fe9222e2a1c2")'
 
 COPY scripts/trans_window_io.R \
      scripts/trans_window_logging.R \
@@ -48,6 +54,7 @@ COPY scripts/trans_window_io.R \
      scripts/run_window_mvsusie.R \
      scripts/summarize_window.R \
      scripts/merge_window_outputs.R \
+     scripts/plot_window_mvsusie.R \
      /opt/mvsusie/scripts/
 
 WORKDIR /opt/mvsusie
