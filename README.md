@@ -38,17 +38,19 @@ measurements while keeping filtering and quantification in one task. See the
 ### Trans-window data preparation
 
 [`PrepareTransWindow`](workflows/prepare_trans_window.wdl) extracts the dosage
-records and phenotype features needed for one trans window. Its purpose is to
-turn genome-wide dosage, association, and molecular-phenotype inputs into
-small, window-specific files that can be processed efficiently downstream.
+records and selects expression, splicing, and protein features for one trans
+window. The default selection uses the top 25 trans expression features, top
+25 trans splicing features, and top 15 trans protein features. It also keeps
+the requested target expression and splicing features.
 
 ### Trans-window multivariate fine-mapping
 
 [`TransWindowMvSusie`](workflows/trans_window_mvsusie.wdl) fits mvSuSiE across
-trans windows using multiple molecular phenotypes jointly, then summarizes and
-merges the results. Its purpose is to identify shared genetic signals and
-quantify variant contributions with PIPs, credible sets, component effects, and
-window-level QC. See the [trans-window fine-mapping guide](docs/trans-window-fine-mapping.md).
+trans windows using expression, splicing, and protein outcomes in one joint
+model. It uses a PCA-only mashr prior, a greedy component schedule, and fixed
+residual covariance. It writes variant PIPs, credible sets, feature support,
+API-scale effect plots, and window QC. See the
+[trans-window fine-mapping guide](docs/trans-window-fine-mapping.md).
 
 ### LD pruning
 
