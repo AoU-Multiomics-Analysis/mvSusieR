@@ -13,7 +13,8 @@ tensorqtl_columns <- c(
 )
 
 require_columns <- function(data, required, label) {
-  missing <- setdiff(required, names(data))
+  available <- if (is.character(data)) data else names(data)
+  missing <- setdiff(required, available)
 
   if (length(missing) > 0L) {
     stop(
@@ -111,13 +112,38 @@ build_trans_window_tensorqtl_outputs <- function(
   )
   write_tsv(associations, associations_path)
 
+  qc <- associations %>%
+    group_by(
+      .data$window_id,
+      .data$chrom,
+      .data$start,
+      .data$end
+    ) %>%
+    summarise(
+      n_trait_mappings = dplyr::n(),
+      n_expression = sum(.data$modality == "expression"),
+      n_splicing = sum(.data$modality == "splicing"),
+      n_protein = sum(.data$modality == "protein"),
+      min_p_value = min(.data$p_value),
+      .groups = "drop"
+    ) %>%
+    arrange(.data$chrom, .data$start)
+  qc_path <- file.path(output_dir, "trans_window_qc.tsv.gz")
+  write_tsv(qc, qc_path)
+
   list(
     associations = associations,
-    associations_path = normalizePath(associations_path, mustWork = TRUE)
+    associations_path = normalizePath(associations_path, mustWork = TRUE),
+    qc = qc,
+    qc_path = normalizePath(qc_path, mustWork = TRUE)
   )
 }
 
-read_trans_input_files <- function(paths, labels) {
+read_trans_input_files <- function(
+    paths,
+    labels,
+    trans_p_threshold = Inf
+) {
   paths <- as.character(paths)
   labels <- as.character(labels)
 
@@ -133,10 +159,45 @@ read_trans_input_files <- function(paths, labels) {
   if (anyNA(labels) || any(!nzchar(labels))) {
     stop("Trans input labels cannot be empty.", call. = FALSE)
   }
+  if (length(trans_p_threshold) != 1L || is.na(trans_p_threshold) ||
+      trans_p_threshold <= 0) {
+    stop("trans_p_threshold must be a positive number.", call. = FALSE)
+  }
 
   map2_dfr(paths, labels, function(path, modality) {
-    read_tsv(path, show_col_types = FALSE) %>%
-      mutate(modality = modality)
+    message("Reading ", modality, " trans associations from ", path, ".")
+    if (str_detect(path, regex("[.]parquet$", ignore_case = TRUE))) {
+      if (!requireNamespace("arrow", quietly = TRUE)) {
+        stop(
+          "The arrow R package is required to read Parquet trans associations.",
+          call. = FALSE
+        )
+      }
+      dataset <- arrow::open_dataset(path, format = "parquet")
+      require_columns(dataset$schema$names, tensorqtl_columns, "Parquet input")
+      message(
+        "Applying the Parquet p-value filter before collecting ",
+        modality,
+        " rows."
+      )
+      data <- dataset %>%
+        select(all_of(tensorqtl_columns)) %>%
+        filter(.data$pval < trans_p_threshold) %>%
+        collect()
+    } else {
+      data <- read_tsv(path, show_col_types = FALSE)
+      if (is.finite(trans_p_threshold)) {
+        data <- data %>%
+          mutate(pval = suppressWarnings(as.numeric(.data$pval))) %>%
+          filter(
+            !is.na(.data$pval),
+            is.finite(.data$pval),
+            .data$pval < trans_p_threshold
+          )
+      }
+    }
+    message("Retained ", nrow(data), " ", modality, " trans rows.")
+    data %>% mutate(modality = modality)
   })
 }
 
@@ -158,7 +219,8 @@ main <- function() {
 
   trans_associations <- read_trans_input_files(
     paths = trans_files,
-    labels = trans_labels
+    labels = trans_labels,
+    trans_p_threshold = as.numeric(args$trans_p_threshold)
   )
 
   result <- build_trans_window_tensorqtl_outputs(
@@ -170,6 +232,7 @@ main <- function() {
 
   message("Wrote ", nrow(result$associations), " trans-window molecular-trait mappings.")
   message("Associations: ", result$associations_path)
+  message("Window QC: ", result$qc_path)
 }
 
 if (sys.nframe() == 0L) {
