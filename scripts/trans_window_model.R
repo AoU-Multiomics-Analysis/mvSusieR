@@ -303,15 +303,25 @@ fit_window_mvsusie <- function(prepared, config) {
   )
 }
 
-empty_credible_set_table <- function() {
+empty_credible_set_summary <- function() {
+  data.table::data.table(
+    component = integer(),
+    credible_set_size = integer(),
+    sentinel_variant_id = character(),
+    sentinel_alpha = numeric(),
+    coverage = numeric(),
+    purity_min = numeric(),
+    purity_mean = numeric()
+  )
+}
+
+empty_credible_set_members <- function() {
   data.table::data.table(
     component = integer(),
     variant_id = character(),
     alpha = numeric(),
     pip = numeric(),
-    coverage = numeric(),
-    purity_min = numeric(),
-    purity_mean = numeric()
+    is_sentinel = logical()
   )
 }
 
@@ -322,16 +332,29 @@ extract_variant_pips <- function(fit, prepared) {
   )
 }
 
-extract_credible_sets <- function(fit, prepared, config) {
+finite_summary <- function(values, fun) {
+  values <- values[is.finite(values)]
+  if (!length(values)) return(NA_real_)
+  fun(values)
+}
+
+extract_credible_set_tables <- function(fit, prepared, config) {
   cs_obj <- susieR::susie_get_cs(
     fit,
     X = prepared$X,
     coverage = config$coverage,
     min_abs_corr = config$min_abs_corr
   )
-  if (!length(cs_obj$cs)) return(empty_credible_set_table())
+  if (!length(cs_obj$cs)) {
+    return(list(
+      summary = empty_credible_set_summary(),
+      members = empty_credible_set_members()
+    ))
+  }
   purity <- cs_obj$purity
-  rows <- lapply(seq_along(cs_obj$cs), function(i) {
+  summary_rows <- vector("list", length(cs_obj$cs))
+  member_rows <- vector("list", length(cs_obj$cs))
+  for (i in seq_along(cs_obj$cs)) {
     members <- cs_obj$cs[[i]]
     component <- as.integer(sub("^L", "", names(cs_obj$cs)[[i]]))
     purity_row <- if (is.null(dim(purity))) purity else purity[i, ]
@@ -339,52 +362,72 @@ extract_credible_sets <- function(fit, prepared, config) {
       purity_row,
       use.names = FALSE
     )))
-    data.table::data.table(
+    alpha <- as.numeric(fit$alpha[component, members])
+    sentinel_index <- which.max(alpha)
+    member_rows[[i]] <- data.table::data.table(
       component = component,
       variant_id = colnames(prepared$X)[members],
-      alpha = as.numeric(fit$alpha[component, members]),
+      alpha = alpha,
       pip = as.numeric(fit$pip[members]),
-      coverage = config$coverage,
-      purity_min = if (length(purity_values)) {
-        min(purity_values, na.rm = TRUE)
-      } else {
-        NA_real_
-      },
-      purity_mean = if (length(purity_values)) {
-        mean(purity_values, na.rm = TRUE)
-      } else {
-        NA_real_
-      }
+      is_sentinel = seq_along(members) == sentinel_index
     )
-  })
-  data.table::rbindlist(rows, fill = TRUE)
+    summary_rows[[i]] <- data.table::data.table(
+      component = component,
+      credible_set_size = as.integer(length(members)),
+      sentinel_variant_id = colnames(prepared$X)[members[[sentinel_index]]],
+      sentinel_alpha = alpha[[sentinel_index]],
+      coverage = config$coverage,
+      purity_min = finite_summary(purity_values, min),
+      purity_mean = finite_summary(purity_values, mean)
+    )
+  }
+  list(
+    summary = data.table::rbindlist(summary_rows, fill = TRUE),
+    members = data.table::rbindlist(member_rows, fill = TRUE)
+  )
 }
 
-extract_component_effects <- function(fit, prepared) {
-  mu <- fit$mu
-  mu2 <- fit$mu2
-  if (length(dim(mu)) != 3L) {
-    stop("Expected mvSuSiE posterior means with three dimensions.", call. = FALSE)
+get_fit_mu2 <- function(fit) {
+  if (!is.null(fit$mu2_diag)) return(fit$mu2_diag)
+  if (!is.null(fit$mu2)) return(fit$mu2)
+  stop("The mvSuSiE fit contains neither mu2_diag nor mu2.", call. = FALSE)
+}
+
+as_component_outcome_matrix <- function(value, n_component, n_outcome, name) {
+  if (is.null(value) || (length(value) == 1L && is.na(value))) {
+    return(matrix(NA_real_, nrow = n_component, ncol = n_outcome))
   }
-  dims <- dim(mu)
-  if (
-    !identical(dims[2L], ncol(prepared$X)) ||
-    !identical(dims[3L], ncol(prepared$Y))
-  ) {
-    stop("Unexpected mvSuSiE posterior dimension order.", call. = FALSE)
+  value <- as.matrix(value)
+  if (!identical(dim(value), c(n_component, n_outcome))) {
+    stop(name, " must have one row per component and one column per outcome.", call. = FALSE)
   }
-  idx <- expand.grid(
-    component = seq_len(dims[1L]),
-    variant_index = seq_len(dims[2L]),
-    phenotype_index = seq_len(dims[3L])
+  value
+}
+
+extract_component_feature_support <- function(fit, prepared) {
+  n_component <- nrow(fit$alpha)
+  n_outcome <- ncol(prepared$Y)
+  lfsr <- as_component_outcome_matrix(
+    fit$single_effect_lfsr, n_component, n_outcome, "single_effect_lfsr"
   )
-  posterior_mean <- as.vector(mu)
-  posterior_sd <- sqrt(pmax(as.vector(mu2) - posterior_mean^2, 0))
+  outcome_lbf <- as_component_outcome_matrix(
+    fit$lbf_outcome, n_component, n_outcome, "lbf_outcome"
+  )
+  idx <- expand.grid(
+    component = seq_len(n_component),
+    outcome_index = seq_len(n_outcome)
+  )
+  metadata <- data.table::as.data.table(prepared$phenotype_metadata)
+  metadata <- metadata[match(colnames(prepared$Y), outcome_key)]
+  if (anyNA(metadata$outcome_key)) {
+    stop("Phenotype metadata does not match the prepared outcome matrix.", call. = FALSE)
+  }
   data.table::data.table(
     component = idx$component,
-    variant_id = colnames(prepared$X)[idx$variant_index],
-    phenotype_id = colnames(prepared$Y)[idx$phenotype_index],
-    posterior_mean = posterior_mean,
-    posterior_sd = posterior_sd
+    outcome_key = metadata$outcome_key[idx$outcome_index],
+    modality = metadata$modality[idx$outcome_index],
+    phenotype_id = metadata$phenotype_id[idx$outcome_index],
+    single_effect_lfsr = as.vector(lfsr),
+    outcome_lbf = as.vector(outcome_lbf)
   )
 }

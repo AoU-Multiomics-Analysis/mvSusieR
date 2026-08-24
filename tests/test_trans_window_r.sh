@@ -110,7 +110,8 @@ Rscript scripts/summarize_window.R \
 Rscript scripts/merge_window_outputs.R \
   --variant-pips "$tmp_dir/window/variant_pip.tsv.gz" \
   --credible-sets "$tmp_dir/window/credible_sets.tsv.gz" \
-  --component-effects "$tmp_dir/window/component_effects.tsv.gz" \
+  --credible-set-members "$tmp_dir/window/credible_set_members.tsv.gz" \
+  --component-feature-support "$tmp_dir/window/component_feature_support.tsv.gz" \
   --window-qc "$tmp_dir/window/window_qc.tsv" \
   --output-dir "$tmp_dir/merged"
 
@@ -126,11 +127,13 @@ for output in \
   "$tmp_dir/resumed_greedy_L_history.tsv" \
   "$tmp_dir/window/variant_pip.tsv.gz" \
   "$tmp_dir/window/credible_sets.tsv.gz" \
-  "$tmp_dir/window/component_effects.tsv.gz" \
+  "$tmp_dir/window/credible_set_members.tsv.gz" \
+  "$tmp_dir/window/component_feature_support.tsv.gz" \
   "$tmp_dir/window/window_qc.tsv" \
   "$tmp_dir/merged/variant_pip.tsv.gz" \
   "$tmp_dir/merged/credible_sets.tsv.gz" \
-  "$tmp_dir/merged/component_effects.tsv.gz" \
+  "$tmp_dir/merged/credible_set_members.tsv.gz" \
+  "$tmp_dir/merged/component_feature_support.tsv.gz" \
   "$tmp_dir/merged/window_qc.tsv"; do
   test -s "$output"
 done
@@ -142,6 +145,38 @@ stopifnot(inherits(prepared$input_checksums, "data.frame"))
 stopifnot(nrow(prepared$input_checksums) == 9L)
 stopifnot(all(nzchar(prepared$input_checksums$md5)))
 stopifnot(nrow(prepared$covariate_provenance) == 6L)
+RS
+
+Rscript - \
+  "$tmp_dir/greedy_L_history.tsv" \
+  "$tmp_dir/window/credible_sets.tsv.gz" \
+  "$tmp_dir/window/credible_set_members.tsv.gz" \
+  "$tmp_dir/window/component_feature_support.tsv.gz" <<'RS'
+args <- commandArgs(trailingOnly = TRUE)
+history <- data.table::fread(args[[1L]], check.names = FALSE)
+stopifnot(identical(
+  names(history),
+  c(
+    "round", "requested_L", "fitted_L", "niter", "minimum_lbf",
+    "credible_set_count", "supported_component_count", "maximum_alpha", "action"
+  )
+))
+credible_sets <- data.table::fread(args[[2L]], check.names = FALSE)
+stopifnot(all(c(
+  "window_id", "component", "credible_set_size", "sentinel_variant_id",
+  "sentinel_alpha", "coverage", "purity_min", "purity_mean"
+) %in% names(credible_sets)))
+members <- data.table::fread(args[[3L]], check.names = FALSE)
+stopifnot(all(c(
+  "window_id", "component", "variant_id", "alpha", "pip", "is_sentinel"
+) %in% names(members)))
+support <- data.table::fread(args[[4L]], check.names = FALSE)
+stopifnot(all(c(
+  "window_id", "component", "outcome_key", "modality", "phenotype_id",
+  "single_effect_lfsr", "outcome_lbf"
+) %in% names(support)))
+stopifnot(nrow(support) == 10L * 6L)
+stopifnot(!file.exists(file.path(dirname(args[[2L]]), "component_effects.tsv.gz")))
 RS
 
 Rscript - "$tmp_dir/window/window_qc.tsv" <<'RS'

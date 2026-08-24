@@ -7,7 +7,8 @@ args <- parse_cli_args(
   option_list = list(
     optparse::make_option("--variant-pips", type = "character"),
     optparse::make_option("--credible-sets", type = "character"),
-    optparse::make_option("--component-effects", type = "character"),
+    optparse::make_option("--credible-set-members", type = "character"),
+    optparse::make_option("--component-feature-support", type = "character"),
     optparse::make_option("--window-qc", type = "character"),
     optparse::make_option("--output-dir", type = "character")
   ),
@@ -33,7 +34,8 @@ merge_gz_table <- function(name, output_name) {
 
 merge_gz_table("variant_pips", "variant_pip.tsv.gz")
 merge_gz_table("credible_sets", "credible_sets.tsv.gz")
-merge_gz_table("component_effects", "component_effects.tsv.gz")
+merge_gz_table("credible_set_members", "credible_set_members.tsv.gz")
+merge_gz_table("component_feature_support", "component_feature_support.tsv.gz")
 
 qc_tables <- read_table_list("window_qc")
 fwrite(
