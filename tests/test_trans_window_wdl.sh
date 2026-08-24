@@ -4,51 +4,65 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-miniwdl check workflows/trans_window_mvsusie.wdl
+workflow="workflows/trans_window_mvsusie.wdl"
+miniwdl check "$workflow"
 miniwdl check workflows/prepare_trans_window.wdl
-rg -q '^version 1[.]0$' workflows/trans_window_mvsusie.wdl
-rg -q 'covariate_modalities' workflows/trans_window_mvsusie.wdl
-rg -q 'sep="[,]" covariate_files' workflows/trans_window_mvsusie.wdl
-rg -q 'File phenotype_data' workflows/trans_window_mvsusie.wdl
-rg -q 'String prior_method = "canonical"' workflows/trans_window_mvsusie.wdl
-rg -q 'Int[?] L_greedy' workflows/trans_window_mvsusie.wdl
-rg -q 'Float greedy_lbf_cutoff = 0.1' workflows/trans_window_mvsusie.wdl
-rg -q 'Int mashr_n_pca = 5' workflows/trans_window_mvsusie.wdl
-rg -q 'Float mashr_strong_lfsr = 0.05' workflows/trans_window_mvsusie.wdl
-rg -q 'Boolean mashr_use_ed = true' workflows/trans_window_mvsusie.wdl
-rg -q 'Boolean estimate_residual_variance = true' workflows/trans_window_mvsusie.wdl
-rg -q -- '--prior-method' workflows/trans_window_mvsusie.wdl
-rg -q -- '--L-greedy' workflows/trans_window_mvsusie.wdl
-rg -q -- '--greedy-lbf-cutoff' workflows/trans_window_mvsusie.wdl
-rg -q 'log[(][)]' workflows/trans_window_mvsusie.wdl
-rg -q 'Starting RunMvSusie' workflows/trans_window_mvsusie.wdl
-rg -Fq 'L_greedy=~{default="fixed" L_greedy}' workflows/trans_window_mvsusie.wdl
-rg -q -- '--mashr-n-pca' workflows/trans_window_mvsusie.wdl
-rg -q -- '--mashr-strong-lfsr' workflows/trans_window_mvsusie.wdl
-rg -q -- '--mashr-skip-ed' workflows/trans_window_mvsusie.wdl
-rg -q -- '--fix-residual-variance' workflows/trans_window_mvsusie.wdl
-rg -q 'ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest' workflows/trans_window_mvsusie.wdl
-test "$(rg -c 'disks: "local-disk 500 SSD"' workflows/trans_window_mvsusie.wdl)" -eq 3
-test "$(rg -c 'memory: "16 GiB"' workflows/trans_window_mvsusie.wdl)" -eq 3
 
-if rg -q 'Array\[File\] phenotype_files' workflows/trans_window_mvsusie.wdl; then
-  echo "The mvSuSiE workflow should consume one combined phenotype file." >&2
+for input in \
+  'File phenotype_data' \
+  'File expression_covariates' \
+  'File splicing_covariates' \
+  'File protein_covariates' \
+  'Int start_L = 10' \
+  'Int step_L = 5' \
+  'Int max_L = 40' \
+  'Float greedy_lbf_cutoff = 1.0' \
+  'Int mashr_n_pca = 5' \
+  'Float mashr_strong_lfsr = 0.05'; do
+  rg -Fq "$input" "$workflow"
+done
+
+for argument in \
+  '--expression-covariates' \
+  '--splicing-covariates' \
+  '--protein-covariates' \
+  '--start-L' \
+  '--step-L' \
+  '--max-L' \
+  '--greedy-lbf-cutoff' \
+  '--mashr-output' \
+  '--greedy-history-output' \
+  '--covariate-provenance-output'; do
+  rg -Fq -- "$argument" "$workflow"
+done
+
+for output in \
+  mashr_training \
+  greedy_L_history \
+  covariate_provenance \
+  credible_set_members \
+  component_feature_support \
+  effect_plot_png \
+  effect_plot_pdf \
+  effect_plot_rds \
+  run_stdout \
+  run_stderr \
+  session_info; do
+  rg -q "$output" "$workflow"
+done
+
+test "$(rg -c 'log[(][)]' "$workflow")" -eq 4
+test "$(rg -c 'disks: "local-disk 500 SSD"' "$workflow")" -eq 4
+test "$(rg -c 'memory: "16 GiB"' "$workflow")" -eq 4
+rg -q 'ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest' "$workflow"
+
+if rg -q 'canonical|extreme.deconvolution|mashr_use_ed|prior_method|L_greedy|component_effects|covariate_modalities|estimate_residual_variance|isoform' "$workflow"; then
+  echo "The joint workflow contains a removed model or input mode." >&2
   exit 1
 fi
 
-for token in \
-  RunMvSusie \
-  SummarizeMvSusie \
-  MergeWindowOutputs \
-  variant_pip \
-  credible_sets \
-  component_effects \
-  window_qc; do
-  rg -q "$token" workflows/trans_window_mvsusie.wdl
-done
-
-if rg -q 'PrepareWindowData|prepare_window[.]R|fit_window[.]R' workflows/trans_window_mvsusie.wdl; then
-  echo "The mvSuSiE workflow should use the consolidated model entrypoint." >&2
+if rg -q 'Array\[File\] phenotype_files|Array\[File\] covariate_files' "$workflow"; then
+  echo "The joint workflow must use one phenotype file and three explicit covariate files." >&2
   exit 1
 fi
 
