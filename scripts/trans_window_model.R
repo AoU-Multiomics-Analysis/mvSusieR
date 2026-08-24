@@ -279,6 +279,7 @@ fit_window_mvsusie <- function(prepared, config) {
       prior = "mashr_pca_only",
       prior_components = length(prepared_prior$xUlist),
       pca_requested = mashr_training$pca_requested,
+      pca_used = mashr_training$pca_used,
       pca_returned = mashr_training$pca_returned,
       mash_model_training_scope = mashr_training$mash_model_training_scope,
       mash_model_training_n = mashr_training$mash_model_training_n,
@@ -288,7 +289,7 @@ fit_window_mvsusie <- function(prepared, config) {
       covariance_selection_lfsr = mashr_training$covariance_selection_lfsr,
       covariance_selection_fallback_used =
         mashr_training$covariance_selection_fallback_used,
-      covariance_input_method = "pca_only",
+      covariance_input_method = mashr_training$covariance_input_method,
       prior_mixture_weights_mode = "fixed_from_mashr",
       prior_scale_conversion = "preserve_mashr_effect_covariance",
       prior_outcome_se_min = min(outcome_se),

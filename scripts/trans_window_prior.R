@@ -253,29 +253,50 @@ learn_joint_mashr_prior <- function(
   ) {
     stop("strong_lfsr must be between zero and one.", call. = FALSE)
   }
-  if (n_pca > nrow(Bhat) || n_pca > ncol(Bhat)) {
-    stop("n_pca cannot exceed the SNP or outcome count.", call. = FALSE)
-  }
   if (!is.null(seed)) set.seed(seed)
 
   mash_data <- make_mashr_data(Bhat, Shat)
-  n_pca <- as.integer(n_pca)
+  pca_requested <- as.integer(n_pca)
+  pca_used <- min(pca_requested, nrow(Bhat), ncol(Bhat))
+  if (pca_used < pca_requested) {
+    pipeline_log(sprintf(
+      "Reducing PCA covariance inputs from %d to %d for this window.",
+      pca_requested, pca_used
+    ))
+  }
   covariance_selection <- select_mashr_covariance_rows(
     mash_data,
-    n_pca = n_pca,
+    n_pca = pca_used,
     lfsr_threshold = strong_lfsr
   )
   covariance_rows <- covariance_selection$rows
   stage_time <- proc.time()[["elapsed"]]
-  pipeline_log(sprintf(
-    "Starting %d PCA covariance inputs on %d selected rows.",
-    n_pca, length(covariance_rows)
-  ))
-  pca_covariances <- cov_pca_fun(
-    mash_data,
-    npc = n_pca,
-    subset = covariance_rows
-  )
+  covariance_input_method <- "pca_only"
+  if (ncol(Bhat) == 1L) {
+    pipeline_log(
+      "Using the univariate equivalent of the PCA total covariance."
+    )
+    covariance_value <- mean(Bhat[covariance_rows, 1L]^2)
+    covariance_value <- max(covariance_value, .Machine$double.eps)
+    covariance <- matrix(
+      covariance_value,
+      nrow = 1L,
+      ncol = 1L,
+      dimnames = list(colnames(Bhat), colnames(Bhat))
+    )
+    pca_covariances <- list(univariate_pca_equivalent = covariance)
+    covariance_input_method <- "univariate_pca_equivalent"
+  } else {
+    pipeline_log(sprintf(
+      "Starting %d PCA covariance inputs on %d selected rows.",
+      pca_used, length(covariance_rows)
+    ))
+    pca_covariances <- cov_pca_fun(
+      mash_data,
+      npc = pca_used,
+      subset = covariance_rows
+    )
+  }
   pipeline_log(sprintf(
     "PCA covariance learning returned %d matrices in %.2f seconds.",
     length(pca_covariances),
@@ -335,9 +356,10 @@ learn_joint_mashr_prior <- function(
     covariance_selection_lfsr = strong_lfsr,
     covariance_selection_fallback_used = covariance_selection$fallback_used,
     covariance_rows = rownames(Bhat)[covariance_rows],
-    pca_requested = n_pca,
+    pca_requested = pca_requested,
+    pca_used = pca_used,
     pca_returned = length(pca_covariances),
-    covariance_input_method = "pca_only",
+    covariance_input_method = covariance_input_method,
     n_covariance_inputs = length(pca_covariances),
     n_prior_components = length(prior$xUlist),
     fallback_to_input_covariances = fallback_to_input_covariances,

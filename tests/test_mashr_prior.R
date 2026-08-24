@@ -124,6 +124,53 @@ stopifnot(any(grepl("PCA covariance", prior_messages, fixed = TRUE)))
 stopifnot(any(grepl("mashr mixture", prior_messages, fixed = TRUE)))
 stopifnot(!any(grepl("extreme deconvolution", prior_messages, fixed = TRUE)))
 
+set.seed(20260824)
+small_Bhat <- matrix(rnorm(24L), nrow = 12L, ncol = 2L)
+small_Shat <- matrix(runif(24L, min = 0.05, max = 0.2), nrow = 12L, ncol = 2L)
+rownames(small_Bhat) <- rownames(small_Shat) <- paste0("small_variant_", 1:12)
+colnames(small_Bhat) <- colnames(small_Shat) <- c("expression::target", "protein::p1")
+small_observed <- new.env(parent = emptyenv())
+small_prior_fit <- suppressMessages(learn_joint_mashr_prior(
+  Bhat = small_Bhat,
+  Shat = small_Shat,
+  n_pca = 5L,
+  seed = 1L,
+  cov_pca_fun = function(data, npc, subset) {
+    small_observed$npc <- npc
+    mashr::cov_pca(data, npc = npc, subset = subset)
+  }
+))
+stopifnot(identical(small_observed$npc, 2L))
+stopifnot(identical(small_prior_fit$pca_requested, 5L))
+stopifnot(identical(small_prior_fit$pca_used, 2L))
+
+univariate_Bhat <- matrix(
+  rnorm(12L), nrow = 12L, ncol = 1L,
+  dimnames = list(paste0("univariate_variant_", 1:12), "expression::target")
+)
+univariate_Shat <- matrix(
+  runif(12L, min = 0.05, max = 0.2), nrow = 12L, ncol = 1L,
+  dimnames = dimnames(univariate_Bhat)
+)
+univariate_prior_fit <- suppressMessages(learn_joint_mashr_prior(
+  Bhat = univariate_Bhat,
+  Shat = univariate_Shat,
+  n_pca = 5L,
+  seed = 1L,
+  cov_pca_fun = function(...) stop("cov_pca must not run for one outcome")
+))
+stopifnot(identical(univariate_prior_fit$pca_requested, 5L))
+stopifnot(identical(univariate_prior_fit$pca_used, 1L))
+stopifnot(identical(
+  univariate_prior_fit$covariance_input_method,
+  "univariate_pca_equivalent"
+))
+stopifnot(all(vapply(
+  univariate_prior_fit$raw_prior$xUlist,
+  function(U) identical(dim(U), c(1L, 1L)),
+  logical(1L)
+)))
+
 bad_covariance <- list(diag(6L))
 bad_covariance[[1L]][1L, 1L] <- Inf
 bad_covariance_error <- tryCatch(

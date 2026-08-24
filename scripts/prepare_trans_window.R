@@ -27,12 +27,15 @@ required_joint_modalities <- function() {
 }
 
 validate_joint_modalities <- function(modalities, label) {
-  expected <- sort(required_joint_modalities())
   actual <- sort(unique(as.character(modalities)))
-  if (!identical(actual, expected)) {
+  unsupported <- setdiff(actual, required_joint_modalities())
+  if (!length(actual)) {
+    stop(label, " must contain at least one supported modality.", call. = FALSE)
+  }
+  if (length(unsupported)) {
     stop(
-      label, " must contain exactly: ",
-      paste(required_joint_modalities(), collapse = ", "),
+      label, " contains an unsupported modality: ",
+      paste(unsupported, collapse = ", "),
       call. = FALSE
     )
   }
@@ -153,18 +156,6 @@ select_top_trans_phenotypes <- function(
     group_by(.data$modality, .data$molecular_trait_id) |>
     summarise(min_pval = min(.data$p_value), .groups = "drop") |>
     arrange(.data$modality, .data$min_pval, .data$molecular_trait_id)
-
-  available <- table(factor(
-    eligible$modality,
-    levels = required_joint_modalities()
-  ))
-  requested <- top_n_by_modality[required_joint_modalities()]
-  if (any(as.integer(available) < requested)) {
-    stop(
-      "Each modality must contain at least its requested number of trans phenotypes.",
-      call. = FALSE
-    )
-  }
 
   eligible |>
     group_by(.data$modality) |>
@@ -360,6 +351,18 @@ prepare_trans_window_data <- function(
     window_associations,
     top_n_by_modality
   )
+  for (modality in required_joint_modalities()) {
+    prepare_log(sprintf(
+      "%s trans selection retained %d of %d available outcomes.",
+      modality,
+      sum(selected_trans$modality == modality),
+      dplyr::n_distinct(
+        window_associations$molecular_trait_id[
+          window_associations$modality == modality
+        ]
+      )
+    ))
+  }
   targets <- read_target_phenotypes(target_phenotypes) |>
     filter(.data$window_id == !!window_id)
   if (!nrow(targets)) {
@@ -416,8 +419,12 @@ prepare_trans_window_data <- function(
         phenotype_inputs[[modality]],
         modality
       )),
-      n_trans_eligible = sum(window_associations$modality == modality),
-      n_trans_selected = top_n_by_modality[[modality]],
+      n_trans_eligible = dplyr::n_distinct(
+        window_associations$molecular_trait_id[
+          window_associations$modality == modality
+        ]
+      ),
+      n_trans_selected = sum(selected_trans$modality == modality),
       n_targets = sum(targets$modality == modality),
       n_retained = nrow(selected),
       top_n = top_n_by_modality[[modality]]

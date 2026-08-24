@@ -45,6 +45,9 @@ read_window_phenotypes_manifest <- function(path) {
     c("window_id", "outcome_key", "phenotype_id", "modality", "phenotype_file"),
     "Window phenotype manifest"
   )
+  if (!nrow(dt)) {
+    stop("Window phenotype manifest must contain at least one outcome.", call. = FALSE)
+  }
   if (anyDuplicated(dt[, paste(window_id, outcome_key, sep = "\r")])) {
     stop(
       "Window phenotype manifest contains duplicate window_id/outcome_key pairs.",
@@ -58,16 +61,14 @@ read_window_phenotypes_manifest <- function(path) {
       call. = FALSE
     )
   }
-  expected_modalities <- sort(required_joint_modalities())
-  modalities_by_window <- split(as.character(dt$modality), dt$window_id)
-  invalid_windows <- names(Filter(function(modalities) {
-    !identical(sort(unique(modalities)), expected_modalities)
-  }, modalities_by_window))
-  if (length(invalid_windows)) {
+  unsupported <- setdiff(
+    unique(as.character(dt$modality)),
+    required_joint_modalities()
+  )
+  if (length(unsupported)) {
     stop(
-      "Every window phenotype manifest must contain exactly: ",
-      paste(required_joint_modalities(), collapse = ", "),
-      ". Invalid windows: ", paste(invalid_windows, collapse = ", "),
+      "Window phenotype manifest contains an unsupported modality: ",
+      paste(unsupported, collapse = ", "),
       call. = FALSE
     )
   }

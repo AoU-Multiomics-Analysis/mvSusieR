@@ -37,6 +37,22 @@ stopifnot(identical(
 ))
 stopifnot(nrow(combined_inputs) == 4L)
 
+if (requireNamespace("arrow", quietly = TRUE)) {
+  parquet_path <- file.path(input_dir, "expression.parquet")
+  arrow::write_parquet(
+    trans[c(1L, 5L), setdiff(names(trans), "modality")],
+    parquet_path
+  )
+  parquet_inputs <- read_trans_input_files(
+    paths = parquet_path,
+    labels = "expression",
+    trans_p_threshold = 1e-8
+  )
+  stopifnot(nrow(parquet_inputs) == 1L)
+  stopifnot(parquet_inputs$variant_id == "chr1:100_A_G")
+  stopifnot(parquet_inputs$modality == "expression")
+}
+
 output_dir <- tempfile("tensorqtl_windows_")
 result <- build_trans_window_tensorqtl_outputs(
   trans_associations = trans,
@@ -47,10 +63,13 @@ result <- build_trans_window_tensorqtl_outputs(
 
 stopifnot(file.exists(result$associations_path))
 stopifnot(basename(result$associations_path) == "trans_window_associations.tsv.gz")
+stopifnot(file.exists(result$qc_path))
+stopifnot(basename(result$qc_path) == "trans_window_qc.tsv.gz")
 associations <- readr::read_tsv(
   result$associations_path,
   show_col_types = FALSE
 )
+qc <- readr::read_tsv(result$qc_path, show_col_types = FALSE)
 expected_columns <- c(
   "window_id", "chrom", "start", "end", "modality",
   "molecular_trait_id", "p_value"
@@ -67,6 +86,20 @@ stopifnot(isTRUE(all.equal(
   as.data.frame(associations),
   check.attributes = FALSE
 )))
+stopifnot(identical(
+  names(qc),
+  c(
+    "window_id", "chrom", "start", "end", "n_trait_mappings",
+    "n_expression", "n_splicing", "n_protein", "min_p_value"
+  )
+))
+first_qc <- qc[qc$window_id == "chr1_0_2000000", ]
+stopifnot(nrow(first_qc) == 1L)
+stopifnot(first_qc$n_trait_mappings == 2L)
+stopifnot(first_qc$n_expression == 2L)
+stopifnot(first_qc$n_splicing == 0L)
+stopifnot(first_qc$n_protein == 0L)
+stopifnot(first_qc$min_p_value == 1e-12)
 
 boundary <- tibble::tibble(
   variant_id = "chr1:2000000_A_G",
