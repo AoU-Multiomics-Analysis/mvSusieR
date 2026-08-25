@@ -12,11 +12,13 @@ on:
       - "scripts/trans_window_model.R"
       - "scripts/trans_window_prior.R"
       - "scripts/trans_window_cli.R"
+      - "scripts/prepare_window.R"
       - "scripts/fit_window.R"
       - "scripts/run_window_mvsusie.R"
       - "scripts/summarize_window.R"
       - "scripts/merge_window_outputs.R"
       - "scripts/plot_window_mvsusie.R"
+      - "workflows/trans_window_mvsusie.wdl"
       - "tests/**"
   pull_request:
     branches: [main]
@@ -28,11 +30,13 @@ on:
       - "scripts/trans_window_model.R"
       - "scripts/trans_window_prior.R"
       - "scripts/trans_window_cli.R"
+      - "scripts/prepare_window.R"
       - "scripts/fit_window.R"
       - "scripts/run_window_mvsusie.R"
       - "scripts/summarize_window.R"
       - "scripts/merge_window_outputs.R"
       - "scripts/plot_window_mvsusie.R"
+      - "workflows/trans_window_mvsusie.wdl"
       - "tests/**"
 
 env:
@@ -79,6 +83,7 @@ jobs:
               "trans_window_model.R",
               "trans_window_prior.R",
               "trans_window_cli.R",
+              "prepare_window.R",
               "fit_window.R",
               "run_window_mvsusie.R",
               "summarize_window.R",
@@ -107,6 +112,12 @@ jobs:
             -w /workspace \
             trans-window-mvsusie-ci:latest \
             bash -lc 'bash tests/test_trans_window_r.sh && Rscript tests/test_plot_window_mvsusie.R'
+
+      - name: Install MiniWDL for workflow smoke tests
+        run: python3 -m pip install miniwdl
+
+      - name: Test raw and prepared-window WDL paths
+        run: bash tests/test_trans_window_wdl_smoke.sh trans-window-mvsusie-ci:latest
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'

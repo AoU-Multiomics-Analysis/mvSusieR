@@ -27,7 +27,7 @@ Rscript scripts/prepare_window.R \
   --window-phenotypes "$input_dir/window_phenotypes.tsv" \
   --window-id w1 \
   --dosage "$input_dir/model_dosage.tsv" \
-  --phenotype-files "$input_dir/model_expression.tsv,$input_dir/model_splicing.tsv,$input_dir/model_protein.tsv" \
+  --phenotype-files "$input_dir/model_phenotypes.tsv" \
   --expression-covariates "$input_dir/model_expression_covariates.tsv" \
   --splicing-covariates "$input_dir/model_splicing_covariates.tsv" \
   --protein-covariates "$input_dir/model_protein_covariates.tsv" \
@@ -55,15 +55,9 @@ if Rscript scripts/fit_window.R \
 fi
 grep -q 'step_L must be a positive integer' "$tmp_dir/invalid_fit.log"
 
-Rscript scripts/run_window_mvsusie.R \
-  --windows "$input_dir/windows.tsv" \
-  --window-phenotypes "$input_dir/window_phenotypes.tsv" \
+Rscript scripts/fit_window.R \
+  --prepared "$tmp_dir/standalone_prepared_window.rds" \
   --window-id w1 \
-  --dosage "$input_dir/model_dosage.tsv" \
-  --phenotype-files "$input_dir/model_expression.tsv,$input_dir/model_splicing.tsv,$input_dir/model_protein.tsv" \
-  --expression-covariates "$input_dir/model_expression_covariates.tsv" \
-  --splicing-covariates "$input_dir/model_splicing_covariates.tsv" \
-  --protein-covariates "$input_dir/model_protein_covariates.tsv" \
   --covariate-provenance-output "$tmp_dir/covariate_provenance.tsv.gz" \
   --start-L 10 \
   --step-L 5 \
@@ -73,12 +67,10 @@ Rscript scripts/run_window_mvsusie.R \
   --mashr-seed 1 \
   --mashr-output "$tmp_dir/mashr_training_bundle.rds" \
   --greedy-history-output "$tmp_dir/greedy_L_history.tsv" \
-  --prepared-output "$tmp_dir/prepared_window.rds" \
-  --fit-output "$tmp_dir/mvsusie_fit.rds" \
+  --output "$tmp_dir/mvsusie_fit.rds" \
   2>&1 | tee "$tmp_dir/run_window.log"
 
-grep -q 'Reading genotype data' "$tmp_dir/run_window.log"
-grep -q 'Residualizing genotype and phenotype matrices' "$tmp_dir/run_window.log"
+grep -q 'Reading prepared window data' "$tmp_dir/run_window.log"
 grep -q 'Computing the all-SNP cross-product' "$tmp_dir/run_window.log"
 grep -q 'Starting 5 PCA covariance inputs' "$tmp_dir/run_window.log"
 grep -q 'Starting greedy mvSuSiE round 1 at L = 10' "$tmp_dir/run_window.log"
@@ -88,7 +80,7 @@ if grep -q 'extreme deconvolution' "$tmp_dir/run_window.log"; then
 fi
 
 Rscript scripts/fit_window.R \
-  --prepared "$tmp_dir/prepared_window.rds" \
+  --prepared "$tmp_dir/standalone_prepared_window.rds" \
   --window-id w1 \
   --start-L 10 \
   --step-L 5 \
@@ -107,7 +99,7 @@ grep -q 'Computing the all-SNP cross-product' "$tmp_dir/fit_window.log"
 grep -q 'Using fixed mashr weights' "$tmp_dir/fit_window.log"
 
 Rscript scripts/summarize_window.R \
-  --prepared "$tmp_dir/prepared_window.rds" \
+  --prepared "$tmp_dir/standalone_prepared_window.rds" \
   --fit "$tmp_dir/mvsusie_fit.rds" \
   --output-dir "$tmp_dir/window"
 
@@ -120,7 +112,7 @@ Rscript scripts/merge_window_outputs.R \
   --output-dir "$tmp_dir/merged"
 
 for output in \
-  "$tmp_dir/prepared_window.rds" \
+  "$tmp_dir/standalone_prepared_window.rds" \
   "$tmp_dir/standalone_covariate_provenance.tsv.gz" \
   "$tmp_dir/covariate_provenance.tsv.gz" \
   "$tmp_dir/resumed_covariate_provenance.tsv.gz" \
@@ -143,11 +135,11 @@ for output in \
   test -s "$output"
 done
 
-Rscript - "$tmp_dir/prepared_window.rds" <<'RS'
+Rscript - "$tmp_dir/standalone_prepared_window.rds" <<'RS'
 args <- commandArgs(trailingOnly = TRUE)
 prepared <- readRDS(args[[1L]])
 stopifnot(inherits(prepared$input_checksums, "data.frame"))
-stopifnot(nrow(prepared$input_checksums) == 9L)
+stopifnot(nrow(prepared$input_checksums) == 7L)
 stopifnot(all(nzchar(prepared$input_checksums$md5)))
 stopifnot(nrow(prepared$covariate_provenance) == 6L)
 RS
@@ -212,7 +204,7 @@ RS
 
 Rscript - \
   "$tmp_dir/resumed_mvsusie_fit.rds" \
-  "$tmp_dir/prepared_window.rds" <<'RS'
+  "$tmp_dir/standalone_prepared_window.rds" <<'RS'
 args <- commandArgs(trailingOnly = TRUE)
 fit <- readRDS(args[[1L]])
 prepared <- readRDS(args[[2L]])

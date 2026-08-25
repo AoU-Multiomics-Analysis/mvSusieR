@@ -41,6 +41,7 @@ write_feature_file <- function(path, modality, phenotype_ids) {
   table <- cbind(metadata, as.data.frame(values))
   names(table)[-(seq_len(ncol(metadata)))] <- sample_ids
   data.table::fwrite(table, path, sep = "\t", quote = FALSE)
+  data.table::as.data.table(table)
 }
 
 phenotype_ids <- list(
@@ -48,20 +49,26 @@ phenotype_ids <- list(
   splicing = c("splice_model_1", "splice_model_2"),
   protein = c("protein_model_1", "protein_model_2")
 )
-write_feature_file(
+expression_table <- write_feature_file(
   file.path(output_dir, "model_expression.tsv"),
   "expression",
   phenotype_ids$expression
 )
-write_feature_file(
+splicing_table <- write_feature_file(
   file.path(output_dir, "model_splicing.tsv"),
   "splicing",
   phenotype_ids$splicing
 )
-write_feature_file(
+protein_table <- write_feature_file(
   file.path(output_dir, "model_protein.tsv"),
   "protein",
   phenotype_ids$protein
+)
+data.table::fwrite(
+  data.table::rbindlist(list(expression_table, splicing_table, protein_table)),
+  file.path(output_dir, "model_phenotypes.tsv"),
+  sep = "\t",
+  quote = FALSE
 )
 
 shared <- rnorm(n_samples)
@@ -112,7 +119,7 @@ manifest <- data.table::rbindlist(lapply(names(phenotype_ids), function(modality
     outcome_key = paste(modality, ids, sep = "::"),
     phenotype_id = ids,
     modality = modality,
-    phenotype_file = paste0("model_", modality, ".tsv")
+    phenotype_file = "model_phenotypes.tsv"
   )
 }))
 data.table::fwrite(

@@ -30,6 +30,7 @@ for script in \
   trans_window_model.R \
   trans_window_prior.R \
   trans_window_cli.R \
+  prepare_window.R \
   fit_window.R \
   run_window_mvsusie.R \
   summarize_window.R \
@@ -40,16 +41,10 @@ for script in \
 done
 
 rg -q 'compute_marginal_bhat_shat_matrix' "$workflow"
+rg -q 'tests/test_trans_window_wdl_smoke[.]sh' "$workflow"
+rg -q 'python3 -m pip install miniwdl' "$workflow"
 
-if rg -q 'prepare_window[.]R' "$dockerfile" "$workflow"; then
-  echo "The mvSuSiE model image must not include prepare_window.R." >&2
-  exit 1
-fi
-
-if rg -q 'workflows/trans_window_mvsusie[.]wdl' "$workflow"; then
-  echo "The model image must not rebuild on WDL-only changes." >&2
-  exit 1
-fi
+rg -q 'workflows/trans_window_mvsusie[.]wdl' "$workflow"
 
 actionlint "$workflow"
 echo "mvSuSiE model container definition passed"

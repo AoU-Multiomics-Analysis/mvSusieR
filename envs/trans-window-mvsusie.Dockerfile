@@ -50,6 +50,7 @@ COPY scripts/trans_window_io.R \
      scripts/trans_window_model.R \
      scripts/trans_window_prior.R \
      scripts/trans_window_cli.R \
+     scripts/prepare_window.R \
      scripts/fit_window.R \
      scripts/run_window_mvsusie.R \
      scripts/summarize_window.R \

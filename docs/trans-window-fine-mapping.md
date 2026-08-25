@@ -1,8 +1,9 @@
 # Joint trans-window fine-mapping
 
 The pipeline has two workflows. `PrepareTransWindow` creates the locus dosage
-and joint phenotype inputs. `TransWindowMvSusie` preprocesses expression,
-splicing, and protein data and fits one mvSuSiE model for each locus.
+and joint phenotype inputs. `TransWindowMvSusie` processes one locus per
+workflow launch. It preprocesses expression, splicing, and protein data and
+fits one joint mvSuSiE model.
 
 ## Prepare the window data
 
@@ -38,10 +39,15 @@ a modality can contribute fewer than N outcomes or no outcomes in a window.
 The workflow rejects a window only when it has no usable outcomes from any
 modality.
 
+The phenotype task uses the intersection of samples in the nonempty assay
+files. It reports the input, retained, and removed sample counts for each
+contributing assay. A missing modality does not reduce the sample set.
+
 ## Preprocess the joint data
 
 [`workflows/trans_window_mvsusie.wdl`](../workflows/trans_window_mvsusie.wdl)
-requires one combined phenotype file and three explicit covariate files:
+has two input modes. In raw mode, it requires one combined phenotype file and
+three explicit covariate files:
 
 - `expression_covariates`
 - `splicing_covariates`
@@ -60,6 +66,11 @@ workflow keeps one copy. If they have the same name but different values, the
 workflow keeps both and adds modality prefixes. The workflow writes this
 decision and an MD5 checksum for each source column to
 `covariate_provenance.tsv.gz`.
+
+In prepared mode, set `prepared_window` to an existing prepared RDS. The
+workflow skips preprocessing and starts with model fitting. The raw genotype,
+phenotype, and covariate inputs are optional in this mode. The workflow checks
+the RDS structure and the `window_id` before it fits the model.
 
 ## Learn the mashr prior
 
@@ -96,7 +107,7 @@ per round to `greedy_L_history.tsv`.
 
 ## Outputs
 
-For each window, the workflow writes:
+For one window, the workflow writes scalar outputs:
 
 - the prepared joint-data bundle;
 - the mashr training bundle with `Bhat`, `Shat`, covariance inputs, and scale
@@ -111,8 +122,9 @@ For each window, the workflow writes:
 - window QC;
 - PNG, PDF, and RDS plot outputs.
 
-The workflow also merges the tabular summaries across windows. It does not
-write the full component-by-variant-by-feature posterior tensor.
+The workflow does not merge results across windows. Run
+`scripts/merge_window_outputs.R` after all window jobs finish. The model does
+not write the full component-by-variant-by-feature posterior tensor.
 
 The effect plot comes from `mvsusieR::mvsusie_plot` with
 `conditional_effect = TRUE`. The pipeline does not transform the effect values
@@ -120,11 +132,15 @@ after this API call. Thus, the figure keeps the mvSuSiE effect scale.
 
 ## Reproducibility
 
+The raw preparation task requests 16 GiB of memory. The long-running fit task
+requests 8 GiB. Thus, a scheduler does not need to hold preparation memory for
+the full model run. The summary and plot tasks remain separate.
+
 The model image pins susieR commit
 `65f3586a865fb6748cb4f9df50510ac577706348` and mvsusieR commit
 `ebd1133953005fa70c6b338727b5fe9222e2a1c2`. GitHub Actions builds the image
-and runs a small joint preparation, prior, model, summary, and plot test. Local
-smoke tests do not build the image.
+and runs small raw-input and prepared-window WDL smoke tests. Local smoke tests
+do not build the image.
 
 Both workflows use WDL 1.0. You can run them with MiniWDL or a
 Cromwell-compatible engine. Dockstore keeps the existing workflow names and

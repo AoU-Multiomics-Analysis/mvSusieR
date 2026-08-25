@@ -275,7 +275,7 @@ task FitMvSusie {
       --covariate-provenance-output covariate_provenance.tsv.gz \
       --mashr-output mashr_training.rds \
       --greedy-history-output greedy_L_history.tsv \
-      --fit-output mvsusie_fit.rds
+      --output mvsusie_fit.rds
     log "Writing the R session information."
     Rscript -e 'writeLines(capture.output(sessionInfo()), "session_info.txt")'
     log "Verifying the joint model outputs for ~{window_id}."
