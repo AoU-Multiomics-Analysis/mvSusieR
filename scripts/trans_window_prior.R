@@ -1,4 +1,6 @@
-source("scripts/trans_window_logging.R")
+module_file <- normalizePath(sys.frame(1L)$ofile)
+module_dir <- dirname(module_file)
+source(file.path(module_dir, "trans_window_logging.R"))
 
 validate_marginal_summary_statistics <- function(Bhat, Shat) {
   if (!is.matrix(Bhat) || !is.numeric(Bhat)) {

@@ -57,7 +57,9 @@ for script in \
   run_window_mvsusie.R \
   summarize_window.R \
   merge_window_outputs.R \
-  plot_window_mvsusie.R; do
+  plot_window_mvsusie.R \
+  trans_window_model.R \
+  trans_window_prior.R; do
   rg -q "scripts/${script}" "$dockerfile"
   rg -q "scripts/${script}" "$workflow"
 done

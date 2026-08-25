@@ -1,5 +1,7 @@
-source("scripts/trans_window_logging.R")
-source("scripts/trans_window_prior.R")
+module_file <- normalizePath(sys.frame(1L)$ofile)
+module_dir <- dirname(module_file)
+source(file.path(module_dir, "trans_window_logging.R"))
+source(file.path(module_dir, "trans_window_prior.R"))
 
 validate_positive_integer <- function(value, label) {
   if (
