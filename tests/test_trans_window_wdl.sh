@@ -9,10 +9,13 @@ miniwdl check "$workflow"
 miniwdl check workflows/prepare_trans_window.wdl
 
 for input in \
-  'File phenotype_data' \
-  'File expression_covariates' \
-  'File splicing_covariates' \
-  'File protein_covariates' \
+  'String window_id' \
+  'File? prepared_window' \
+  'File? phenotype_data' \
+  'File? expression_covariates' \
+  'File? splicing_covariates' \
+  'File? protein_covariates' \
+  'String docker_image = "ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest"' \
   'Int start_L = 10' \
   'Int step_L = 5' \
   'Int max_L = 40' \
@@ -20,6 +23,10 @@ for input in \
   'Int mashr_n_pca = 5' \
   'Float mashr_strong_lfsr = 0.05'; do
   rg -Fq "$input" "$workflow"
+done
+
+for task in ValidateMvSusieInputs PrepareMvSusieInput FitMvSusie; do
+  rg -Fq "task $task" "$workflow"
 done
 
 for argument in \
@@ -51,10 +58,18 @@ for output in \
   rg -q "$output" "$workflow"
 done
 
-test "$(rg -c 'log[(][)]' "$workflow")" -eq 4
-test "$(rg -c 'disks: "local-disk 500 SSD"' "$workflow")" -eq 4
-test "$(rg -c 'memory: "16 GiB"' "$workflow")" -eq 4
+rg -Fq 'memory: "8 GiB"' "$workflow"
+rg -Fq 'memory: "16 GiB"' "$workflow"
 rg -q 'ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest' "$workflow"
+
+if rg -q 'scatter[[:space:]]*[(]|Array\[File\] prepared_windows|call MergeWindowOutputs' "$workflow"; then
+  echo "The model workflow must process and return one window." >&2
+  exit 1
+fi
+
+for output in prepared_window_output mvsusie_fit mashr_training greedy_L_history; do
+  rg -q -e "^[[:space:]]+File ${output}[[:space:]]*=" "$workflow"
+done
 
 if rg -q 'canonical|extreme.deconvolution|mashr_use_ed|prior_method|L_greedy|component_effects|covariate_modalities|estimate_residual_variance|isoform' "$workflow"; then
   echo "The joint workflow contains a removed model or input mode." >&2

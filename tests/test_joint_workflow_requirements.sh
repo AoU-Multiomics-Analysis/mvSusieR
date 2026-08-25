@@ -25,11 +25,16 @@ done
 rg -q 'target_phenotypes' scripts/prepare_trans_window.R
 
 for contract in \
-  'File expression_covariates' \
-  'File splicing_covariates' \
-  'File protein_covariates'; do
+  'File? expression_covariates' \
+  'File? splicing_covariates' \
+  'File? protein_covariates' \
+  'File? prepared_window'; do
   rg -Fq "$contract" "$model_wdl"
 done
+if rg -q 'scatter[[:space:]]*[(]|Array\[File\] prepared_windows' "$model_wdl"; then
+  echo "The joint model workflow must process one window." >&2
+  exit 1
+fi
 rg -q 'make_genotype_covariates' "$preprocess_script"
 rg -q 'collapse_aligned_covariates' "$preprocess_script"
 rg -q 'finite_by_row[(]X_raw[)] & finite_by_row[(]Y_raw[)]' "$preprocess_script"
@@ -66,7 +71,7 @@ rg -q 'conditional_effect = TRUE' scripts/plot_window_mvsusie.R
 
 rg -q '65f3586a865fb6748cb4f9df50510ac577706348' "$image"
 rg -q 'ebd1133953005fa70c6b338727b5fe9222e2a1c2' "$image"
-test "$(rg -c 'log[(][)]' "$model_wdl")" -eq 4
+test "$(rg -c 'log[(][)]' "$model_wdl")" -eq 5
 rg -q 'docker run --rm' "$image_ci"
 rg -q 'tests/test_trans_window_r[.]sh' "$image_ci"
 rg -q 'tests/test_plot_window_mvsusie[.]R' "$image_ci"

@@ -2,12 +2,15 @@ version 1.0
 
 workflow TransWindowMvSusie {
   input {
-    File windows_tsv
-    File window_phenotypes_tsv
-    File phenotype_data
-    File expression_covariates
-    File splicing_covariates
-    File protein_covariates
+    String window_id
+    File? prepared_window
+    File? window_manifest
+    File? window_phenotypes_tsv
+    File? dosage
+    File? phenotype_data
+    File? expression_covariates
+    File? splicing_covariates
+    File? protein_covariates
     File? keep_samples
     Int start_L = 10
     Int step_L = 5
@@ -23,93 +26,156 @@ workflow TransWindowMvSusie {
     Int mashr_n_pca = 5
     Float mashr_strong_lfsr = 0.05
     Int? mashr_seed
+    String docker_image = "ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest"
   }
 
-  Array[Array[String]] window_rows = read_tsv(windows_tsv)
+  call ValidateMvSusieInputs {
+    input:
+      has_prepared_window = defined(prepared_window),
+      has_window_manifest = defined(window_manifest),
+      has_window_phenotypes_tsv = defined(window_phenotypes_tsv),
+      has_dosage = defined(dosage),
+      has_phenotype_data = defined(phenotype_data),
+      has_expression_covariates = defined(expression_covariates),
+      has_splicing_covariates = defined(splicing_covariates),
+      has_protein_covariates = defined(protein_covariates),
+      docker_image = docker_image
+  }
 
-  scatter (window_index in range(length(window_rows) - 1)) {
-    Array[String] window = window_rows[window_index + 1]
-    File dosage = window[4]
-
-    call RunMvSusie {
+  if (ValidateMvSusieInputs.run_preparation) {
+    call PrepareMvSusieInput {
       input:
-        windows_tsv = windows_tsv,
-        window_phenotypes_tsv = window_phenotypes_tsv,
-        window_id = window[0],
-        dosage = dosage,
-        phenotype_data = phenotype_data,
-        expression_covariates = expression_covariates,
-        splicing_covariates = splicing_covariates,
-        protein_covariates = protein_covariates,
+        window_id = window_id,
+        window_manifest = select_first([window_manifest]),
+        window_phenotypes_tsv = select_first([window_phenotypes_tsv]),
+        dosage = select_first([dosage]),
+        phenotype_data = select_first([phenotype_data]),
+        expression_covariates = select_first([expression_covariates]),
+        splicing_covariates = select_first([splicing_covariates]),
+        protein_covariates = select_first([protein_covariates]),
         keep_samples = keep_samples,
         min_genotype_variance = min_genotype_variance,
         min_phenotype_variance = min_phenotype_variance,
-        start_L = start_L,
-        step_L = step_L,
-        max_L = max_L,
-        greedy_lbf_cutoff = greedy_lbf_cutoff,
-        max_iter = max_iter,
-        tol = tol,
-        coverage = coverage,
-        min_abs_corr = min_abs_corr,
-        n_thread = n_thread,
-        mashr_n_pca = mashr_n_pca,
-        mashr_strong_lfsr = mashr_strong_lfsr,
-        mashr_seed = mashr_seed
-    }
-
-    call SummarizeMvSusie {
-      input:
-        prepared_window = RunMvSusie.prepared_window,
-        mvsusie_fit = RunMvSusie.mvsusie_fit
-    }
-
-    call PlotMvSusie {
-      input:
-        prepared_window = RunMvSusie.prepared_window,
-        mvsusie_fit = RunMvSusie.mvsusie_fit
+        docker_image = docker_image
     }
   }
 
-  call MergeWindowOutputs {
+  File resolved_prepared_window = select_first([prepared_window, PrepareMvSusieInput.prepared_window])
+
+  call FitMvSusie {
     input:
-      variant_pips = SummarizeMvSusie.variant_pip,
-      credible_sets = SummarizeMvSusie.credible_sets,
-      credible_set_members = SummarizeMvSusie.credible_set_members,
-      component_feature_support = SummarizeMvSusie.component_feature_support,
-      window_qc = SummarizeMvSusie.window_qc
+      window_id = window_id,
+      prepared_window = resolved_prepared_window,
+      start_L = start_L,
+      step_L = step_L,
+      max_L = max_L,
+      greedy_lbf_cutoff = greedy_lbf_cutoff,
+      max_iter = max_iter,
+      tol = tol,
+      coverage = coverage,
+      min_abs_corr = min_abs_corr,
+      n_thread = n_thread,
+      mashr_n_pca = mashr_n_pca,
+      mashr_strong_lfsr = mashr_strong_lfsr,
+      mashr_seed = mashr_seed,
+      docker_image = docker_image
+  }
+
+  call SummarizeMvSusie {
+    input:
+      prepared_window = resolved_prepared_window,
+      mvsusie_fit = FitMvSusie.mvsusie_fit,
+      docker_image = docker_image
+  }
+
+  call PlotMvSusie {
+    input:
+      prepared_window = resolved_prepared_window,
+      mvsusie_fit = FitMvSusie.mvsusie_fit,
+      docker_image = docker_image
   }
 
   output {
-    Array[File] prepared_windows = RunMvSusie.prepared_window
-    Array[File] mvsusie_fits = RunMvSusie.mvsusie_fit
-    Array[File] mashr_training = RunMvSusie.mashr_training
-    Array[File] greedy_L_history = RunMvSusie.greedy_L_history
-    Array[File] covariate_provenance = RunMvSusie.covariate_provenance
-    Array[File] run_stdout = RunMvSusie.run_stdout
-    Array[File] run_stderr = RunMvSusie.run_stderr
-    Array[File] session_info = RunMvSusie.session_info
-    Array[File] variant_pip = SummarizeMvSusie.variant_pip
-    Array[File] credible_sets = SummarizeMvSusie.credible_sets
-    Array[File] credible_set_members = SummarizeMvSusie.credible_set_members
-    Array[File] component_feature_support = SummarizeMvSusie.component_feature_support
-    Array[File] window_qc = SummarizeMvSusie.window_qc
-    Array[File] effect_plot_png = PlotMvSusie.effect_plot_png
-    Array[File] effect_plot_pdf = PlotMvSusie.effect_plot_pdf
-    Array[File] effect_plot_rds = PlotMvSusie.effect_plot_rds
-    File merged_variant_pip = MergeWindowOutputs.merged_variant_pip
-    File merged_credible_sets = MergeWindowOutputs.merged_credible_sets
-    File merged_credible_set_members = MergeWindowOutputs.merged_credible_set_members
-    File merged_component_feature_support = MergeWindowOutputs.merged_component_feature_support
-    File merged_window_qc = MergeWindowOutputs.merged_window_qc
+    File prepared_window_output = resolved_prepared_window
+    File mvsusie_fit = FitMvSusie.mvsusie_fit
+    File mashr_training = FitMvSusie.mashr_training
+    File greedy_L_history = FitMvSusie.greedy_L_history
+    File covariate_provenance = FitMvSusie.covariate_provenance
+    File run_stdout = FitMvSusie.run_stdout
+    File run_stderr = FitMvSusie.run_stderr
+    File session_info = FitMvSusie.session_info
+    File variant_pip = SummarizeMvSusie.variant_pip
+    File credible_sets = SummarizeMvSusie.credible_sets
+    File credible_set_members = SummarizeMvSusie.credible_set_members
+    File component_feature_support = SummarizeMvSusie.component_feature_support
+    File window_qc = SummarizeMvSusie.window_qc
+    File effect_plot_png = PlotMvSusie.effect_plot_png
+    File effect_plot_pdf = PlotMvSusie.effect_plot_pdf
+    File effect_plot_rds = PlotMvSusie.effect_plot_rds
   }
 }
 
-task RunMvSusie {
+task ValidateMvSusieInputs {
   input {
-    File windows_tsv
-    File window_phenotypes_tsv
+    Boolean has_prepared_window
+    Boolean has_window_manifest
+    Boolean has_window_phenotypes_tsv
+    Boolean has_dosage
+    Boolean has_phenotype_data
+    Boolean has_expression_covariates
+    Boolean has_splicing_covariates
+    Boolean has_protein_covariates
+    String docker_image
+  }
+
+  command <<<
+    set -euo pipefail
+    log() {
+      printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
+    }
+
+    if ~{has_prepared_window}; then
+      log "A prepared window is present. The workflow will skip phenotype and genotype preparation."
+      printf 'false\n' > run_preparation.txt
+      exit 0
+    fi
+
+    log "No prepared window is present. Checking the raw preparation inputs."
+    missing=()
+    if ! ~{has_window_manifest}; then missing+=("window_manifest"); fi
+    if ! ~{has_window_phenotypes_tsv}; then missing+=("window_phenotypes_tsv"); fi
+    if ! ~{has_dosage}; then missing+=("dosage"); fi
+    if ! ~{has_phenotype_data}; then missing+=("phenotype_data"); fi
+    if ! ~{has_expression_covariates}; then missing+=("expression_covariates"); fi
+    if ! ~{has_splicing_covariates}; then missing+=("splicing_covariates"); fi
+    if ! ~{has_protein_covariates}; then missing+=("protein_covariates"); fi
+
+    if (( ${#missing[@]} > 0 )); then
+      log "Raw preparation inputs are missing: ${missing[*]}."
+      exit 1
+    fi
+
+    log "All raw preparation inputs are present."
+    printf 'true\n' > run_preparation.txt
+  >>>
+
+  output {
+    Boolean run_preparation = read_boolean("run_preparation.txt")
+  }
+
+  runtime {
+    docker: docker_image
+    cpu: 1
+    memory: "1 GiB"
+    disks: "local-disk 10 SSD"
+  }
+}
+
+task PrepareMvSusieInput {
+  input {
     String window_id
+    File window_manifest
+    File window_phenotypes_tsv
     File dosage
     File phenotype_data
     File expression_covariates
@@ -118,6 +184,55 @@ task RunMvSusie {
     File? keep_samples
     Float min_genotype_variance
     Float min_phenotype_variance
+    String docker_image
+  }
+
+  command <<<
+    set -euo pipefail
+    log() {
+      printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
+    }
+
+    log "Starting preparation for ~{window_id}. The task has 16 GiB of memory."
+    Rscript /opt/mvsusie/scripts/prepare_window.R \
+      --windows ~{window_manifest} \
+      --window-phenotypes ~{window_phenotypes_tsv} \
+      --window-id ~{window_id} \
+      --dosage ~{dosage} \
+      --phenotype-files ~{phenotype_data} \
+      --expression-covariates ~{expression_covariates} \
+      --splicing-covariates ~{splicing_covariates} \
+      --protein-covariates ~{protein_covariates} \
+      ~{if defined(keep_samples) then "--keep-samples " + select_first([keep_samples]) else ""} \
+      --min-genotype-variance ~{min_genotype_variance} \
+      --min-phenotype-variance ~{min_phenotype_variance} \
+      --covariate-provenance-output preparation_covariate_provenance.tsv.gz \
+      --output prepared_window.rds
+    log "Verifying the prepared window for ~{window_id}."
+    test -s prepared_window.rds
+    test -s preparation_covariate_provenance.tsv.gz
+    log "Completed preparation for ~{window_id}."
+  >>>
+
+  output {
+    File prepared_window = "prepared_window.rds"
+    File covariate_provenance = "preparation_covariate_provenance.tsv.gz"
+    File preparation_stdout = stdout()
+    File preparation_stderr = stderr()
+  }
+
+  runtime {
+    docker: docker_image
+    cpu: 2
+    memory: "16 GiB"
+    disks: "local-disk 500 SSD"
+  }
+}
+
+task FitMvSusie {
+  input {
+    String window_id
+    File prepared_window
     Int start_L
     Int step_L
     Int max_L
@@ -130,29 +245,21 @@ task RunMvSusie {
     Int mashr_n_pca
     Float mashr_strong_lfsr
     Int? mashr_seed
+    String docker_image
   }
 
   command <<<
     set -euo pipefail
-
     log() {
       printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
     }
 
-    log "Starting joint mvSuSiE for ~{window_id}: start L=~{start_L}, step L=~{step_L}, maximum L=~{max_L}."
-    log "Resolved controls: cutoff=~{greedy_lbf_cutoff}, PCA=~{mashr_n_pca}, coverage=~{coverage}, minimum correlation=~{min_abs_corr}."
-    Rscript /opt/mvsusie/scripts/run_window_mvsusie.R \
-      --windows ~{windows_tsv} \
-      --window-phenotypes ~{window_phenotypes_tsv} \
+    log "Starting joint mvSuSiE for ~{window_id}. The task has 8 GiB of memory."
+    log "Greedy L starts at ~{start_L}, increases by ~{step_L}, and stops at ~{max_L}; the cutoff is ~{greedy_lbf_cutoff}."
+    log "The fit is verbose. Iteration updates will be present in the task log."
+    Rscript /opt/mvsusie/scripts/fit_window.R \
+      --prepared ~{prepared_window} \
       --window-id ~{window_id} \
-      --dosage ~{dosage} \
-      --phenotype-files ~{phenotype_data} \
-      --expression-covariates ~{expression_covariates} \
-      --splicing-covariates ~{splicing_covariates} \
-      --protein-covariates ~{protein_covariates} \
-      ~{if defined(keep_samples) then "--keep-samples " + select_first([keep_samples]) else ""} \
-      --min-genotype-variance ~{min_genotype_variance} \
-      --min-phenotype-variance ~{min_phenotype_variance} \
       --start-L ~{start_L} \
       --step-L ~{step_L} \
       --max-L ~{max_L} \
@@ -168,12 +275,10 @@ task RunMvSusie {
       --covariate-provenance-output covariate_provenance.tsv.gz \
       --mashr-output mashr_training.rds \
       --greedy-history-output greedy_L_history.tsv \
-      --prepared-output prepared_window.rds \
       --fit-output mvsusie_fit.rds
     log "Writing the R session information."
     Rscript -e 'writeLines(capture.output(sessionInfo()), "session_info.txt")'
-    log "Verifying the joint model outputs."
-    test -s prepared_window.rds
+    log "Verifying the joint model outputs for ~{window_id}."
     test -s mvsusie_fit.rds
     test -s mashr_training.rds
     test -s greedy_L_history.tsv
@@ -183,7 +288,6 @@ task RunMvSusie {
   >>>
 
   output {
-    File prepared_window = "prepared_window.rds"
     File mvsusie_fit = "mvsusie_fit.rds"
     File mashr_training = "mashr_training.rds"
     File greedy_L_history = "greedy_L_history.tsv"
@@ -194,9 +298,9 @@ task RunMvSusie {
   }
 
   runtime {
-    docker: "ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest"
+    docker: docker_image
     cpu: 2
-    memory: "16 GiB"
+    memory: "8 GiB"
     disks: "local-disk 500 SSD"
   }
 }
@@ -205,6 +309,7 @@ task SummarizeMvSusie {
   input {
     File prepared_window
     File mvsusie_fit
+    String docker_image
   }
 
   command <<<
@@ -236,7 +341,7 @@ task SummarizeMvSusie {
   }
 
   runtime {
-    docker: "ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest"
+    docker: docker_image
     cpu: 2
     memory: "16 GiB"
     disks: "local-disk 500 SSD"
@@ -247,6 +352,7 @@ task PlotMvSusie {
   input {
     File prepared_window
     File mvsusie_fit
+    String docker_image
   }
 
   command <<<
@@ -275,56 +381,8 @@ task PlotMvSusie {
   }
 
   runtime {
-    docker: "ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest"
+    docker: docker_image
     cpu: 2
-    memory: "16 GiB"
-    disks: "local-disk 500 SSD"
-  }
-}
-
-task MergeWindowOutputs {
-  input {
-    Array[File] variant_pips
-    Array[File] credible_sets
-    Array[File] credible_set_members
-    Array[File] component_feature_support
-    Array[File] window_qc
-  }
-
-  command <<<
-    set -euo pipefail
-    log() {
-      printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
-    }
-    log "Starting the merge of joint mvSuSiE summaries."
-    mkdir -p merged
-    Rscript /opt/mvsusie/scripts/merge_window_outputs.R \
-      --variant-pips "~{sep="," variant_pips}" \
-      --credible-sets "~{sep="," credible_sets}" \
-      --credible-set-members "~{sep="," credible_set_members}" \
-      --component-feature-support "~{sep="," component_feature_support}" \
-      --window-qc "~{sep="," window_qc}" \
-      --output-dir merged
-    log "Verifying the merged joint mvSuSiE summaries."
-    test -s merged/variant_pip.tsv.gz
-    test -e merged/credible_sets.tsv.gz
-    test -e merged/credible_set_members.tsv.gz
-    test -s merged/component_feature_support.tsv.gz
-    test -s merged/window_qc.tsv
-    log "Completed the merge of joint mvSuSiE summaries."
-  >>>
-
-  output {
-    File merged_variant_pip = "merged/variant_pip.tsv.gz"
-    File merged_credible_sets = "merged/credible_sets.tsv.gz"
-    File merged_credible_set_members = "merged/credible_set_members.tsv.gz"
-    File merged_component_feature_support = "merged/component_feature_support.tsv.gz"
-    File merged_window_qc = "merged/window_qc.tsv"
-  }
-
-  runtime {
-    docker: "ghcr.io/aou-multiomics-analysis/mvsusier-trans-window-mvsusie:latest"
-    cpu: 1
     memory: "16 GiB"
     disks: "local-disk 500 SSD"
   }
