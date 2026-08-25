@@ -65,14 +65,17 @@ stopifnot(
   file.exists(file.path(cli_output_dir, "window_qc.tsv"))
 )
 
-result <- prepare_trans_window_data(
-  window_id = "w1",
-  trans_associations = trans_associations,
-  expression_phenotypes = fixture("expression.bed.gz"),
-  splicing_phenotypes = fixture("splicing.bed.gz"),
-  protein_phenotypes = fixture("protein.bed.gz"),
-  target_phenotypes = fixture("target_phenotypes.tsv"),
-  output_dir = fixture("prepared")
+prepare_messages <- capture.output(
+  result <- prepare_trans_window_data(
+    window_id = "w1",
+    trans_associations = trans_associations,
+    expression_phenotypes = fixture("expression.bed.gz"),
+    splicing_phenotypes = fixture("splicing.bed.gz"),
+    protein_phenotypes = fixture("protein.bed.gz"),
+    target_phenotypes = fixture("target_phenotypes.tsv"),
+    output_dir = fixture("prepared")
+  ),
+  type = "message"
 )
 
 manifest <- read_tsv(result$window_phenotypes, show_col_types = FALSE)
@@ -97,10 +100,51 @@ stopifnot(all(c(
 combined <- read_tsv(result$phenotype_data, show_col_types = FALSE)
 stopifnot(identical(combined$phenotype_id, manifest$outcome_key))
 stopifnot(nrow(combined) == nrow(manifest))
+stopifnot(identical(names(combined)[-(1:4)], c("1001", "1003")))
+stopifnot(
+  identical(
+    as.numeric(combined[combined$phenotype_id == "expression::expr_27", -(1:4)]),
+    c(27.1, 27.3)
+  ),
+  identical(
+    as.numeric(combined[combined$phenotype_id == "splicing::splice_27", -(1:4)]),
+    c(27.2, 27.1)
+  ),
+  identical(
+    as.numeric(combined[combined$phenotype_id == "protein::protein_17", -(1:4)]),
+    c(17.3, 17.2)
+  )
+)
 
 qc <- read_tsv(result$window_qc, show_col_types = FALSE)
 stopifnot(identical(as.integer(qc$top_n), c(25L, 25L, 15L)))
 stopifnot(identical(as.integer(qc$n_targets), c(1L, 2L, 0L)))
+stopifnot(
+  identical(as.integer(qc$n_input_samples), c(3L, 3L, 3L)),
+  identical(as.integer(qc$n_shared_samples), c(2L, 2L, 2L)),
+  identical(as.integer(qc$n_samples_removed), c(1L, 1L, 1L))
+)
+stopifnot(all(vapply(c("expression", "splicing", "protein"), function(modality) {
+  any(grepl(
+    paste0(modality, " phenotype samples: input=3, shared=2, removed=1"),
+    prepare_messages,
+    fixed = TRUE
+  ))
+}, logical(1L))))
+
+disjoint_protein <- read_tsv(fixture("protein.bed.gz"), show_col_types = FALSE)
+names(disjoint_protein)[-(1:4)] <- c("2001", "2002", "2003")
+disjoint_protein_path <- fixture("disjoint_protein.bed.gz")
+write_tsv(disjoint_protein, disjoint_protein_path)
+expect_error_matching(
+  prepare_trans_window_data(
+    "w1", trans_associations,
+    fixture("expression.bed.gz"), fixture("splicing.bed.gz"),
+    disjoint_protein_path, fixture("target_phenotypes.tsv"),
+    fixture("disjoint_samples")
+  ),
+  "no shared phenotype samples"
+)
 
 overlap_targets <- tribble(
   ~window_id, ~modality, ~phenotype_id,

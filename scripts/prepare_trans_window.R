@@ -280,6 +280,55 @@ select_joint_phenotype_rows <- function(
   selected
 }
 
+normalize_prepare_sample_ids <- function(ids) {
+  ids <- trimws(as.character(ids))
+  sub("^X(?=[0-9])", "", ids, perl = TRUE)
+}
+
+align_prepare_phenotype_samples <- function(selected_tables) {
+  if (!length(selected_tables) || is.null(names(selected_tables))) {
+    stop("Contributing phenotype tables must be a named list.", call. = FALSE)
+  }
+  sample_columns <- lapply(selected_tables, function(data) {
+    output_columns <- names(data)[!startsWith(names(data), ".")]
+    output_columns[-seq_len(4L)]
+  })
+  normalized <- lapply(sample_columns, normalize_prepare_sample_ids)
+  duplicated <- vapply(normalized, anyDuplicated, integer(1L)) > 0L
+  if (any(duplicated)) {
+    stop(
+      "Sample ID normalization creates duplicates within modality: ",
+      paste(names(selected_tables)[duplicated], collapse = ", "),
+      call. = FALSE
+    )
+  }
+  shared <- Reduce(intersect, normalized)
+  shared <- normalized[[1L]][normalized[[1L]] %in% shared]
+  if (!length(shared)) {
+    stop(
+      "Contributing modalities have no shared phenotype samples.",
+      call. = FALSE
+    )
+  }
+  aligned <- Map(function(data, source_columns, sample_ids) {
+    metadata_columns <- names(data)[seq_len(4L)]
+    internal_columns <- names(data)[startsWith(names(data), ".")]
+    selected_columns <- source_columns[match(shared, sample_ids)]
+    output <- data |>
+      select(all_of(c(metadata_columns, selected_columns, internal_columns)))
+    names(output)[seq.int(5L, 4L + length(shared))] <- shared
+    output
+  }, selected_tables, sample_columns, normalized)
+  names(aligned) <- names(selected_tables)
+  qc <- tibble(
+    modality = names(selected_tables),
+    n_input_samples = lengths(normalized),
+    n_shared_samples = length(shared),
+    n_samples_removed = lengths(normalized) - length(shared)
+  )
+  list(tables = aligned, qc = qc, shared_samples = shared)
+}
+
 write_prepare_phenotype_subset <- function(selected_tables, output_dir) {
   output_path <- file.path(output_dir, "window_phenotypes.bed.gz")
   output_tables <- map(selected_tables, function(selected) {
@@ -390,12 +439,27 @@ prepare_trans_window_data <- function(
     )
   })
   names(selected_tables) <- required_joint_modalities()
+  contributing_tables <- keep(selected_tables, ~ nrow(.x) > 0L)
+  if (!length(contributing_tables)) {
+    stop("No outcomes were selected for window: ", window_id, call. = FALSE)
+  }
+  aligned <- align_prepare_phenotype_samples(contributing_tables)
+  for (modality in names(aligned$tables)) {
+    sample_qc <- aligned$qc |> filter(.data$modality == !!modality)
+    prepare_log(sprintf(
+      "%s phenotype samples: input=%d, shared=%d, removed=%d.",
+      modality,
+      sample_qc$n_input_samples,
+      sample_qc$n_shared_samples,
+      sample_qc$n_samples_removed
+    ))
+  }
 
   phenotype_data_path <- write_prepare_phenotype_subset(
-    selected_tables,
+    aligned$tables,
     output_dir
   )
-  manifest <- imap_dfr(selected_tables, function(selected, modality) {
+  manifest <- imap_dfr(aligned$tables, function(selected, modality) {
     tibble(
       window_id = window_id,
       outcome_key = selected$.outcome_key,
@@ -429,7 +493,8 @@ prepare_trans_window_data <- function(
       n_retained = nrow(selected),
       top_n = top_n_by_modality[[modality]]
     )
-  })
+  }) |>
+    left_join(aligned$qc, by = "modality")
   qc_path <- file.path(output_dir, "window_qc.tsv")
   write_tsv(qc, qc_path)
 

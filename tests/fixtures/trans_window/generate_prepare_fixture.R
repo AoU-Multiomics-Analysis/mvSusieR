@@ -40,32 +40,45 @@ write_tsv(
   file.path(output_dir, "trans_window_associations.tsv.gz")
 )
 
-make_phenotypes <- function(prefix, count, targets = character()) {
+make_phenotypes <- function(prefix, count, samples, targets = character()) {
   ids <- c(sprintf("%s_%02d", prefix, seq_len(count)), targets)
   index <- seq_along(ids)
-  tibble(
+  metadata <- tibble(
     chr = ifelse(index %% 2L == 0L, "chr2", "chr3"),
     start = 500L + index * 10L,
     end = 505L + index * 10L,
-    phenotype_id = ids,
-    sample_1 = index / 10,
-    sample_2 = index / 5
+    phenotype_id = ids
   )
+  values <- vapply(
+    seq_along(samples),
+    function(sample_index) index + sample_index / 10,
+    numeric(length(index))
+  )
+  colnames(values) <- samples
+  bind_cols(metadata, as_tibble(values, .name_repair = "minimal"))
 }
 
 write_tsv(
-  make_phenotypes("expr", 27L, "expr_target"),
+  make_phenotypes(
+    "expr", 27L,
+    samples = c("X1001", "1002", "1003"),
+    targets = "expr_target"
+  ),
   file.path(output_dir, "expression.bed.gz")
 )
 write_tsv(
   make_phenotypes(
     "splice", 27L,
-    c("splice_target_1", "splice_target_2")
+    samples = c("1003", "X1001", "1004"),
+    targets = c("splice_target_1", "splice_target_2")
   ),
   file.path(output_dir, "splicing.bed.gz")
 )
 write_tsv(
-  make_phenotypes("protein", 17L),
+  make_phenotypes(
+    "protein", 17L,
+    samples = c("1005", "1003", "1001")
+  ),
   file.path(output_dir, "protein.bed.gz")
 )
 
