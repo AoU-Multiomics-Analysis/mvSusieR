@@ -113,7 +113,7 @@ jobs:
             -v "$PWD:/workspace" \
             -w /workspace \
             trans-window-mvsusie-ci:latest \
-            bash -lc 'bash tests/test_trans_window_r.sh && Rscript tests/test_plot_window_mvsusie.R'
+            bash -c 'bash tests/test_trans_window_r.sh && Rscript tests/test_plot_window_mvsusie.R'
 
       - name: Install MiniWDL for workflow smoke tests
         run: python3 -m pip install miniwdl
