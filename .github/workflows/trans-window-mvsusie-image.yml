@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "envs/trans-window-mvsusie.Dockerfile"
+      - "envs/trans-window-mvsusie.environment.yml"
       - "scripts/trans_window_io.R"
       - "scripts/trans_window_logging.R"
       - "scripts/trans_window_preprocess.R"
@@ -24,6 +25,7 @@ on:
     branches: [main]
     paths:
       - "envs/trans-window-mvsusie.Dockerfile"
+      - "envs/trans-window-mvsusie.environment.yml"
       - "scripts/trans_window_io.R"
       - "scripts/trans_window_logging.R"
       - "scripts/trans_window_preprocess.R"
@@ -73,8 +75,8 @@ jobs:
             stopifnot(requireNamespace("susieR", quietly = TRUE))
             stopifnot(requireNamespace("mashr", quietly = TRUE))
             stopifnot(requireNamespace("ggplot2", quietly = TRUE))
-            stopifnot(packageDescription("susieR")$RemoteSha == "65f3586a865fb6748cb4f9df50510ac577706348")
-            stopifnot(packageDescription("mvsusieR")$RemoteSha == "ebd1133953005fa70c6b338727b5fe9222e2a1c2")
+            stopifnot(packageVersion("mvsusieR") >= "0.3.0")
+            stopifnot(packageVersion("susieR") >= "0.15.0")
             stopifnot(is.function(mvsusieR::mvsusie_plot))
             scripts <- c(
               "trans_window_io.R",

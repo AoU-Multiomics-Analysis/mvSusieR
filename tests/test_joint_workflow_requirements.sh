@@ -10,6 +10,7 @@ model_script="scripts/trans_window_model.R"
 prior_script="scripts/trans_window_prior.R"
 preprocess_script="scripts/trans_window_preprocess.R"
 image="envs/trans-window-mvsusie.Dockerfile"
+image_environment="envs/trans-window-mvsusie.environment.yml"
 image_ci=".github/workflows/trans-window-mvsusie-image.yml"
 
 for contract in \
@@ -69,8 +70,8 @@ rg -q 'fit = previous_fit' "$model_script"
 rg -q 'mvsusieR::mvsusie_plot' scripts/plot_window_mvsusie.R
 rg -q 'conditional_effect = TRUE' scripts/plot_window_mvsusie.R
 
-rg -q '65f3586a865fb6748cb4f9df50510ac577706348' "$image"
-rg -q 'ebd1133953005fa70c6b338727b5fe9222e2a1c2' "$image"
+rg -Fq '  - r-mvsusier=0.3.0' "$image_environment"
+rg -Fq '  - r-susier>=0.15' "$image_environment"
 test "$(rg -c 'log[(][)]' "$model_wdl")" -eq 5
 rg -q 'docker run --rm' "$image_ci"
 rg -q 'tests/test_trans_window_r[.]sh' "$image_ci"

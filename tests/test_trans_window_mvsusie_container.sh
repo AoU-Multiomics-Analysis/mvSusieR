@@ -5,22 +5,44 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 dockerfile="envs/trans-window-mvsusie.Dockerfile"
+environment="envs/trans-window-mvsusie.environment.yml"
 workflow=".github/workflows/trans-window-mvsusie-image.yml"
 
 test -s "$dockerfile"
+test -s "$environment"
 test -s "$workflow"
-rg -q '^FROM rocker/r-ver:4[.]4[.]1$' "$dockerfile"
-rg -q '65f3586a865fb6748cb4f9df50510ac577706348' "$dockerfile"
-rg -q 'ebd1133953005fa70c6b338727b5fe9222e2a1c2' "$dockerfile"
-rg -q 'mashr' "$dockerfile"
-rg -q 'ggplot2' "$dockerfile"
-rg -q 'ripgrep' "$dockerfile"
-rg -q 'install_github' "$dockerfile"
-for package in dplyr purrr readr R.utils stringr tibble; do
-  rg -q "    ${package}" "$dockerfile"
+rg -q '^FROM mambaorg/micromamba:2[.]3[.]3$' "$dockerfile"
+rg -q 'micromamba config set channel_priority strict' "$dockerfile"
+rg -q 'micromamba install --yes --name base --override-channels --strict-channel-priority --file /tmp/environment[.]yml' "$dockerfile"
+rg -q 'ENV MAMBA_DOCKERFILE_ACTIVATE=1' "$dockerfile"
+rg -q 'ENV PATH=/opt/conda/bin:' "$dockerfile"
+if rg -q 'apt-get|install_github|rocker/r-ver' "$dockerfile"; then
+  echo "The mvSuSiE image must install its runtime with micromamba." >&2
+  exit 1
+fi
+
+for channel in dnachun conda-forge bioconda; do
+  rg -Fq "  - ${channel}" "$environment"
 done
-rg -q 'RemoteSha.*65f3586a865fb6748cb4f9df50510ac577706348' "$workflow"
-rg -q 'RemoteSha.*ebd1133953005fa70c6b338727b5fe9222e2a1c2' "$workflow"
+for package in \
+  'r-base=4.4' \
+  'r-mvsusier=0.3.0' \
+  'r-susier>=0.15' \
+  r-mashr \
+  r-data.table \
+  r-dplyr \
+  r-ggplot2 \
+  r-optparse \
+  r-purrr \
+  r-readr \
+  r-r.utils \
+  r-stringr \
+  r-tibble \
+  ripgrep; do
+  rg -Fq "  - ${package}" "$environment"
+done
+rg -q 'packageVersion[(]"mvsusieR"[)] >= "0.3.0"' "$workflow"
+rg -q 'packageVersion[(]"susieR"[)] >= "0.15.0"' "$workflow"
 rg -q 'mvsusie_plot' "$workflow"
 
 for script in \

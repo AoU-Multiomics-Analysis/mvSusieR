@@ -1,0 +1,23 @@
+name: base
+channels:
+  - dnachun
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base=4.4
+  - r-mvsusier=0.3.0
+  - r-susier>=0.15
+  - r-mashr
+  - r-data.table
+  - r-dplyr
+  - r-ggplot2
+  - r-optparse
+  - r-purrr
+  - r-readr
+  - r-r.utils
+  - r-stringr
+  - r-tibble
+  - bash
+  - coreutils
+  - gzip
+  - ripgrep

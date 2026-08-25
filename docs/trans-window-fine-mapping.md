@@ -136,11 +136,11 @@ The raw preparation task requests 16 GiB of memory. The long-running fit task
 requests 8 GiB. Thus, a scheduler does not need to hold preparation memory for
 the full model run. The summary and plot tasks remain separate.
 
-The model image pins susieR commit
-`65f3586a865fb6748cb4f9df50510ac577706348` and mvsusieR commit
-`ebd1133953005fa70c6b338727b5fe9222e2a1c2`. GitHub Actions builds the image
-and runs small raw-input and prepared-window WDL smoke tests. Local smoke tests
-do not build the image.
+The model image uses micromamba with strict channel priority. The `dnachun`
+channel supplies mvSuSiER 0.3.0 and susieR 0.15 or newer. The image build
+checks both installed versions before it copies the pipeline scripts. GitHub
+Actions builds the image and runs small raw-input and prepared-window WDL
+smoke tests. Local smoke tests do not build the image.
 
 Both workflows use WDL 1.0. You can run them with MiniWDL or a
 Cromwell-compatible engine. Dockstore keeps the existing workflow names and
