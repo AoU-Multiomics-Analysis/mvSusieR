@@ -11,6 +11,7 @@ RUN apt-get update \
         libcurl4-openssl-dev \
         libssl-dev \
         libxml2-dev \
+        tabix \
     && rm -rf /var/lib/apt/lists/*
 
 RUN install2.r --error --skipinstalled --ncpus -1 \
@@ -21,7 +22,9 @@ RUN install2.r --error --skipinstalled --ncpus -1 \
     stringr \
     tibble
 
-COPY scripts/prepare_trans_window.R scripts/trans_window_cli.R /opt/mvsusie/scripts/
+COPY scripts/prepare_trans_window.R scripts/trans_window_cli.R \
+    scripts/index_phenotype_bed.sh /opt/mvsusie/scripts/
+RUN chmod +x /opt/mvsusie/scripts/index_phenotype_bed.sh
 WORKDIR /opt/mvsusie
 
 CMD ["Rscript"]

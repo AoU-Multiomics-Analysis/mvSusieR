@@ -9,6 +9,9 @@ on:
       - "envs/prepare-window-phenotypes.Dockerfile"
       - "scripts/prepare_trans_window.R"
       - "scripts/trans_window_cli.R"
+      - "scripts/index_phenotype_bed.sh"
+      - "tests/fixtures/trans_window/generate_index_fixture.R"
+      - "tests/test_index_phenotype_bed.sh"
   pull_request:
     branches: [main]
     paths:
@@ -16,6 +19,9 @@ on:
       - "envs/prepare-window-phenotypes.Dockerfile"
       - "scripts/prepare_trans_window.R"
       - "scripts/trans_window_cli.R"
+      - "scripts/index_phenotype_bed.sh"
+      - "tests/fixtures/trans_window/generate_index_fixture.R"
+      - "tests/test_index_phenotype_bed.sh"
 
 env:
   REGISTRY: ghcr.io
@@ -51,6 +57,7 @@ jobs:
             stopifnot(all(vapply(packages, requireNamespace, logical(1), quietly = TRUE)))
             stopifnot(file.exists("/opt/mvsusie/scripts/prepare_trans_window.R"))
             stopifnot(file.exists("/opt/mvsusie/scripts/trans_window_cli.R"))
+            stopifnot(file.exists("/opt/mvsusie/scripts/index_phenotype_bed.sh"))
           '
           docker run --rm --workdir /tmp prepare-window-phenotypes-ci:latest \
             Rscript /opt/mvsusie/scripts/prepare_trans_window.R --help >/dev/null
@@ -62,6 +69,14 @@ jobs:
             -w /workspace \
             prepare-window-phenotypes-ci:latest \
             Rscript tests/test_prepare_trans_window.R
+
+      - name: Test phenotype indexing in the image
+        run: |
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            prepare-window-phenotypes-ci:latest \
+            bash tests/test_index_phenotype_bed.sh
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
