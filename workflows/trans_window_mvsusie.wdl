@@ -17,11 +17,11 @@ workflow TransWindowMvSusie {
     Int max_L = 40
     Float greedy_lbf_cutoff = 1.0
     Int max_iter = 100
-    Float tol = 1e-4
+    Float tol = 0.0001
     Float coverage = 0.95
     Float min_abs_corr = 0.5
-    Float min_genotype_variance = 1e-8
-    Float min_phenotype_variance = 1e-8
+    Float min_genotype_variance = 0.00000001
+    Float min_phenotype_variance = 0.00000001
     Int n_thread = 1
     Int mashr_n_pca = 5
     Float mashr_strong_lfsr = 0.05

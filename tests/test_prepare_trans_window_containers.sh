@@ -18,7 +18,13 @@ rg -q 'optparse' envs/prepare-window-phenotypes.Dockerfile
 for package in dplyr purrr readr stringr tibble; do
   rg -q "^[[:space:]]+${package}([[:space:]]|$)" envs/prepare-window-phenotypes.Dockerfile
 done
-rg -q 'COPY scripts/prepare_trans_window[.]R scripts/trans_window_cli[.]R /opt/mvsusie/scripts/' envs/prepare-window-phenotypes.Dockerfile
+for script in \
+  prepare_trans_window.R \
+  trans_window_cli.R \
+  index_phenotype_bed.sh; do
+  rg -Fq "scripts/${script}" envs/prepare-window-phenotypes.Dockerfile
+done
+rg -Fq '/opt/mvsusie/scripts/' envs/prepare-window-phenotypes.Dockerfile
 
 rg -q 'name: prepare-trans-window' .dockstore.yml
 rg -q 'primaryDescriptorPath: /workflows/prepare_trans_window[.]wdl' .dockstore.yml
@@ -38,10 +44,10 @@ done
 rg -q 'envs/prepare-window-genotypes[.]Dockerfile' .github/workflows/prepare-window-genotypes-image.yml
 rg -q 'envs/prepare-window-phenotypes[.]Dockerfile' .github/workflows/prepare-window-phenotypes-image.yml
 
-if rg -q 'workflows/prepare_trans_window[.]wdl|prepare-window-(genotypes|phenotypes)-image[.]yml' \
+if rg -q 'workflows/prepare_trans_window[.]wdl' \
   .github/workflows/prepare-window-genotypes-image.yml \
   .github/workflows/prepare-window-phenotypes-image.yml; then
-  echo "Container rebuild triggers must not include workflow files." >&2
+  echo "Container rebuild triggers must not include the preparation WDL." >&2
   exit 1
 fi
 

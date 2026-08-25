@@ -38,3 +38,6 @@ jobs:
             echo "Checking ${wdl}"
             miniwdl check "${wdl}"
           done
+
+      - name: Check portable numeric literals
+        run: bash tests/test_wdl_portable_numeric_literals.sh
