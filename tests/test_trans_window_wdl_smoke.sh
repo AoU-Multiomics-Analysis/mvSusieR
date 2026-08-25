@@ -41,8 +41,17 @@ miniwdl run \
   mashr_seed=1 \
   docker_image="$image"
 
-prepared_window="$(jq -r '.["TransWindowMvSusie.prepared_window_output"]' "$tmp_dir/raw_outputs.json")"
-test -s "$prepared_window"
+prepared_window="$(
+  jq -er '.outputs["TransWindowMvSusie.prepared_window_output"]' \
+    "$tmp_dir/raw_outputs.json"
+)"
+printf '[%s] Raw path prepared window: %s\n' \
+  "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+  "$prepared_window" >&2
+if [[ ! -s "$prepared_window" ]]; then
+  echo "The raw-input WDL path did not return a prepared window." >&2
+  exit 1
+fi
 
 printf '[%s] Running the prepared-window WDL path.\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >&2
 miniwdl run \
@@ -60,7 +69,14 @@ miniwdl run \
   mashr_seed=1 \
   docker_image="$image"
 
-test -s "$(jq -r '.["TransWindowMvSusie.mvsusie_fit"]' "$tmp_dir/prepared_outputs.json")"
+prepared_fit="$(
+  jq -er '.outputs["TransWindowMvSusie.mvsusie_fit"]' \
+    "$tmp_dir/prepared_outputs.json"
+)"
+if [[ ! -s "$prepared_fit" ]]; then
+  echo "The prepared-window WDL path did not return an mvSuSiE fit." >&2
+  exit 1
+fi
 if find "$tmp_dir/prepared" -type d -name '*PrepareMvSusieInput*' -print -quit | grep -q .; then
   echo "The prepared-window path ran the preparation task." >&2
   exit 1
