@@ -57,6 +57,15 @@ rg -Fq 'ln -sf "~{genome_dosage}" "${dosage_name}"' workflows/prepare_trans_wind
 rg -Fq 'ln -sf "~{genome_dosage_tbi}" "${dosage_name}.tbi"' workflows/prepare_trans_window.wdl
 rg -Fq 'test -s "${dosage_name}"' workflows/prepare_trans_window.wdl
 rg -Fq 'test -s "${dosage_name}.tbi"' workflows/prepare_trans_window.wdl
+rg -Fq 'tabix -H "${dosage_name}" > dosage_header.raw.tsv' \
+  workflows/prepare_trans_window.wdl
+rg -Fq 'if [[ -s dosage_header.raw.tsv ]]; then' \
+  workflows/prepare_trans_window.wdl
+rg -Fq 'gzip -cd -- "${dosage_name}"' workflows/prepare_trans_window.wdl
+rg -Fq 'tail -n 1 dosage_header.raw.tsv' workflows/prepare_trans_window.wdl
+rg -Fq 'header_line="${header_line#\#}"' workflows/prepare_trans_window.wdl
+rg -Fq 'Dosage header must start with CHROM, POS, REF, and ALT.' \
+  workflows/prepare_trans_window.wdl
 for filename in \
   '.window_dosage.tsv' \
   '.window_manifest.tsv' \

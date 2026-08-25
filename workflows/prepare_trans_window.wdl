@@ -105,8 +105,34 @@ task PrepareWindowGenotypes {
 
     IFS=$'\t' read -r window_chrom window_start window_end <<< "${window_row}"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Interval: ${window_chrom}:$((window_start + 1))-${window_end}."
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Reading the dosage header."
+    tabix -H "${dosage_name}" > dosage_header.raw.tsv
+    if [[ -s dosage_header.raw.tsv ]]; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Using the header returned by tabix."
+    else
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] tabix returned no header. Reading the first compressed line."
+      set +o pipefail
+      gzip -cd -- "${dosage_name}" \
+        | awk 'NR == 1 {print; exit}' \
+        > dosage_header.raw.tsv
+      set -o pipefail
+    fi
+    test -s dosage_header.raw.tsv
+    header_line="$(tail -n 1 dosage_header.raw.tsv)"
+    header_line="${header_line#\#}"
+    printf '%s\n' "${header_line}" > "output/${output_prefix}.window_dosage.tsv"
+    if ! awk -F '\t' '
+      NR == 1 {
+        valid = ($1 == "CHROM" && $2 == "POS" && $3 == "REF" && $4 == "ALT")
+        exit !valid
+      }
+    ' "output/${output_prefix}.window_dosage.tsv"; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Dosage header must start with CHROM, POS, REF, and ALT." >&2
+      exit 1
+    fi
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Dosage header validation complete."
+
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracting all locus genotype rows."
-    tabix -H "${dosage_name}" > "output/${output_prefix}.window_dosage.tsv"
     tabix "${dosage_name}" \
       "${window_chrom}:$((window_start + 1))-${window_end}" \
       >> "output/${output_prefix}.window_dosage.tsv"

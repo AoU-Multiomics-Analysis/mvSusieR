@@ -8,6 +8,7 @@ on:
       - ".github/workflows/wdl-validation.yml"
       - "workflows/**/*.wdl"
       - "tests/test_prepare_trans_window_wdl.sh"
+      - "tests/test_prepare_window_genotype_header_wdl_smoke.sh"
       - "tests/test_trans_window_wdl.sh"
       - "tests/test_wdl_portable_numeric_literals.sh"
   pull_request:
@@ -16,6 +17,7 @@ on:
       - ".github/workflows/wdl-validation.yml"
       - "workflows/**/*.wdl"
       - "tests/test_prepare_trans_window_wdl.sh"
+      - "tests/test_prepare_window_genotype_header_wdl_smoke.sh"
       - "tests/test_trans_window_wdl.sh"
       - "tests/test_wdl_portable_numeric_literals.sh"
 
@@ -33,7 +35,7 @@ jobs:
       - name: Install workflow-test tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes ripgrep
+          sudo apt-get install --yes ripgrep tabix
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.6.25
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
@@ -59,3 +61,6 @@ jobs:
         run: |
           bash tests/test_prepare_trans_window_wdl.sh
           bash tests/test_trans_window_wdl.sh
+
+      - name: Test genotype dosage headers
+        run: bash tests/test_prepare_window_genotype_header_wdl_smoke.sh
