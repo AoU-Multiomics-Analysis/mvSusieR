@@ -66,6 +66,14 @@ rg -q 'compute_marginal_bhat_shat_matrix' "$workflow"
 rg -q 'tests/test_trans_window_wdl_smoke[.]sh' "$workflow"
 rg -q 'python3 -m pip install miniwdl' "$workflow"
 rg -q -- '--user "[$][(]id -u[)]:[$][(]id -g[)]"' tests/test_trans_window_wdl_smoke.sh
+if rg -q 'miniwdl run workflows/trans_window_mvsusie[.]wdl' tests/test_trans_window_wdl_smoke.sh; then
+  echo "MiniWDL runner options must precede the WDL path." >&2
+  exit 1
+fi
+if rg -q '^[[:space:]]+TransWindowMvSusie[.].*=' tests/test_trans_window_wdl_smoke.sh; then
+  echo "MiniWDL command-line input names must not use the workflow prefix." >&2
+  exit 1
+fi
 rg -Fq "bash -c 'bash tests/test_trans_window_r.sh" "$workflow"
 if rg -Fq "bash -lc 'bash tests/test_trans_window_r.sh" "$workflow"; then
   echo "A login shell must not replace the micromamba runtime PATH." >&2
