@@ -38,6 +38,7 @@ write_feature_file <- function(path, modality, phenotype_ids) {
     phenotype_id = outcome_keys
   )
   values <- matrix(rnorm(n_samples * length(phenotype_ids)), nrow = length(phenotype_ids))
+  values[1L, ] <- 5 * dosage[, 1L] + rnorm(n_samples, sd = 0.1)
   table <- cbind(metadata, as.data.frame(values))
   names(table)[-(seq_len(ncol(metadata)))] <- sample_ids
   data.table::fwrite(table, path, sep = "\t", quote = FALSE)

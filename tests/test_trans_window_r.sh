@@ -202,6 +202,7 @@ stopifnot(identical(fit$metadata$prior_mixture_weights_mode, "fixed_from_mashr")
 stopifnot(identical(fit$metadata$covariance_input_method, "pca_only"))
 stopifnot(nrow(fit$fit$alpha) == 10L)
 stopifnot(identical(fit$metadata$L_final, 10L))
+stopifnot(length(fit$fit$sets$cs) >= 1L)
 RS
 
 Rscript - \
