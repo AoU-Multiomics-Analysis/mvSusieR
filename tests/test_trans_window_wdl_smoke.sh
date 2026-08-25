@@ -12,6 +12,7 @@ mkdir -p "$input_dir" "$tmp_dir/raw" "$tmp_dir/prepared"
 
 printf '[%s] Generating the WDL smoke-test inputs.\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >&2
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
   -v "$repo_root:/workspace" \
   -v "$input_dir:/inputs" \
   -w /workspace \

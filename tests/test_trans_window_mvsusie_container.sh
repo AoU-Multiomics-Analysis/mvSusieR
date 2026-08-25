@@ -65,6 +65,7 @@ done
 rg -q 'compute_marginal_bhat_shat_matrix' "$workflow"
 rg -q 'tests/test_trans_window_wdl_smoke[.]sh' "$workflow"
 rg -q 'python3 -m pip install miniwdl' "$workflow"
+rg -q -- '--user "[$][(]id -u[)]:[$][(]id -g[)]"' tests/test_trans_window_wdl_smoke.sh
 rg -Fq "bash -c 'bash tests/test_trans_window_r.sh" "$workflow"
 if rg -Fq "bash -lc 'bash tests/test_trans_window_r.sh" "$workflow"; then
   echo "A login shell must not replace the micromamba runtime PATH." >&2
