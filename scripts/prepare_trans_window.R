@@ -203,14 +203,61 @@ read_target_phenotypes <- function(path) {
   targets
 }
 
-read_prepare_phenotype_table <- function(path, modality) {
-  phenotype_table <- read_tsv(
+validate_indexed_input_pair <- function(index_path, lookup_path, modality) {
+  has_index <- !is.null(index_path) && nzchar(index_path)
+  has_lookup <- !is.null(lookup_path) && nzchar(lookup_path)
+  if (xor(has_index, has_lookup)) {
+    stop(
+      modality,
+      " requires both phenotype index and lookup inputs.",
+      call. = FALSE
+    )
+  }
+  if (!has_index) {
+    return("full_scan")
+  }
+  if (!file.exists(index_path) || !file.exists(lookup_path)) {
+    stop(modality, " indexed phenotype inputs do not exist.", call. = FALSE)
+  }
+  "tabix"
+}
+
+read_phenotype_lookup <- function(path, modality) {
+  lookup <- read_tsv(
     path,
     col_types = cols(.default = col_character()),
     name_repair = "minimal",
     show_col_types = FALSE,
     progress = FALSE
   )
+  required <- c("phenotype_id", "chrom", "start", "end")
+  require_columns(lookup, required, paste(modality, "phenotype lookup"))
+  lookup <- lookup |>
+    transmute(
+      phenotype_id = as.character(.data$phenotype_id),
+      chrom = as.character(.data$chrom),
+      start = suppressWarnings(as.integer(.data$start)),
+      end = suppressWarnings(as.integer(.data$end))
+    )
+  if (
+    anyNA(lookup$phenotype_id) || anyNA(lookup$chrom) ||
+    any(!nzchar(lookup$phenotype_id)) || any(!nzchar(lookup$chrom))
+  ) {
+    stop(modality, " phenotype lookup identifiers cannot be empty.", call. = FALSE)
+  }
+  if (
+    anyNA(lookup$start) || anyNA(lookup$end) ||
+    any(lookup$start < 0L) || any(lookup$end <= lookup$start)
+  ) {
+    stop(modality, " phenotype lookup coordinates are invalid.", call. = FALSE)
+  }
+  if (anyDuplicated(lookup$phenotype_id)) {
+    stop(modality, " phenotype lookup contains duplicate IDs.", call. = FALSE)
+  }
+  lookup
+}
+
+normalize_prepare_phenotype_table <- function(phenotype_table, path, modality) {
   if (ncol(phenotype_table) < 5L) {
     stop(
       paste0(
@@ -245,6 +292,176 @@ read_prepare_phenotype_table <- function(path, modality) {
     stop("Phenotype file contains duplicate IDs: ", path, call. = FALSE)
   }
   phenotype_table
+}
+
+read_prepare_phenotype_table <- function(path, modality) {
+  phenotype_table <- read_tsv(
+    path,
+    col_types = cols(.default = col_character()),
+    name_repair = "minimal",
+    show_col_types = FALSE,
+    progress = FALSE
+  )
+  normalize_prepare_phenotype_table(phenotype_table, path, modality)
+}
+
+read_prepare_phenotype_header <- function(path) {
+  connection <- gzfile(path, open = "rt")
+  on.exit(close(connection), add = TRUE)
+  header_line <- readLines(connection, n = 1L, warn = FALSE)
+  if (length(header_line) != 1L || !nzchar(header_line)) {
+    stop("Phenotype file has no header: ", path, call. = FALSE)
+  }
+  header <- strsplit(header_line, "\t", fixed = TRUE)[[1L]]
+  if (length(header) < 5L) {
+    stop(
+      "Phenotype file header must contain four metadata columns and samples: ",
+      path,
+      call. = FALSE
+    )
+  }
+  sub("^#", "", header)
+}
+
+empty_prepare_phenotype_table <- function(header, path, modality) {
+  empty_columns <- rep(list(character()), length(header))
+  names(empty_columns) <- header
+  normalize_prepare_phenotype_table(
+    as_tibble(empty_columns, .name_repair = "minimal"),
+    path,
+    modality
+  )
+}
+
+read_prepare_phenotype_table_indexed <- function(
+    path,
+    index_path,
+    lookup_path,
+    modality,
+    requested_ids
+) {
+  modality_started <- proc.time()[["elapsed"]]
+  lookup_started <- proc.time()[["elapsed"]]
+  lookup <- read_phenotype_lookup(lookup_path, modality)
+  lookup_seconds <- proc.time()[["elapsed"]] - lookup_started
+  requested_ids <- unique(as.character(requested_ids))
+  matched <- lookup[match(requested_ids, lookup$phenotype_id), , drop = FALSE]
+  matched <- matched[!is.na(matched$phenotype_id), , drop = FALSE]
+  header <- read_prepare_phenotype_header(path)
+
+  query_seconds <- 0
+  parse_seconds <- 0
+  query_rows <- 0L
+  if (!nrow(matched)) {
+    phenotype_table <- empty_prepare_phenotype_table(header, path, modality)
+  } else {
+    region_path <- tempfile(pattern = paste0(modality, "-regions-"), fileext = ".bed")
+    local_bgzf <- tempfile(pattern = paste0(modality, "-phenotypes-"), fileext = ".bed.gz")
+    local_tbi <- paste0(local_bgzf, ".tbi")
+    query_path <- tempfile(pattern = paste0(modality, "-query-"), fileext = ".tsv")
+    error_path <- tempfile(pattern = paste0(modality, "-tabix-"), fileext = ".log")
+    on.exit(
+      unlink(c(region_path, local_bgzf, local_tbi, query_path, error_path)),
+      add = TRUE
+    )
+    write.table(
+      matched[c("chrom", "start", "end")],
+      region_path,
+      quote = FALSE,
+      sep = "\t",
+      row.names = FALSE,
+      col.names = FALSE
+    )
+    linked <- c(
+      file.symlink(normalizePath(path, mustWork = TRUE), local_bgzf),
+      file.symlink(normalizePath(index_path, mustWork = TRUE), local_tbi)
+    )
+    if (!all(linked)) {
+      stop("Cannot localize indexed ", modality, " phenotype files.", call. = FALSE)
+    }
+
+    query_started <- proc.time()[["elapsed"]]
+    status <- system2(
+      "tabix",
+      c("-R", shQuote(region_path), shQuote(local_bgzf)),
+      stdout = query_path,
+      stderr = error_path
+    )
+    query_seconds <- proc.time()[["elapsed"]] - query_started
+    if (!identical(as.integer(status), 0L)) {
+      details <- readLines(error_path, warn = FALSE)
+      stop(
+        "Tabix query failed for ", modality, " phenotypes: ",
+        paste(details, collapse = " "),
+        call. = FALSE
+      )
+    }
+
+    parse_started <- proc.time()[["elapsed"]]
+    if (file.info(query_path)$size == 0) {
+      phenotype_table <- empty_prepare_phenotype_table(header, path, modality)
+    } else {
+      queried <- read_tsv(
+        query_path,
+        col_names = header,
+        col_types = cols(.default = col_character()),
+        name_repair = "minimal",
+        show_col_types = FALSE,
+        progress = FALSE
+      )
+      query_rows <- nrow(queried)
+      id_column <- names(queried)[[4L]]
+      queried <- queried |>
+        filter(.data[[id_column]] %in% requested_ids) |>
+        distinct()
+      if (anyDuplicated(queried[[id_column]])) {
+        stop(
+          "Tabix extraction returned duplicate ", modality,
+          " phenotype IDs.",
+          call. = FALSE
+        )
+      }
+      queried <- queried[
+        match(intersect(requested_ids, queried[[id_column]]), queried[[id_column]]),
+        ,
+        drop = FALSE
+      ]
+      phenotype_table <- normalize_prepare_phenotype_table(
+        queried,
+        path,
+        modality
+      )
+    }
+    parse_seconds <- proc.time()[["elapsed"]] - parse_started
+  }
+
+  list(
+    table = phenotype_table,
+    n_input = nrow(lookup),
+    access_method = "tabix",
+    lookup_seconds = lookup_seconds,
+    query_seconds = query_seconds,
+    parse_seconds = parse_seconds,
+    query_rows = query_rows,
+    modality_seconds = proc.time()[["elapsed"]] - modality_started
+  )
+}
+
+read_prepare_phenotype_table_full_scan <- function(path, modality) {
+  modality_started <- proc.time()[["elapsed"]]
+  parse_started <- proc.time()[["elapsed"]]
+  phenotype_table <- read_prepare_phenotype_table(path, modality)
+  parse_seconds <- proc.time()[["elapsed"]] - parse_started
+  list(
+    table = phenotype_table,
+    n_input = nrow(phenotype_table),
+    access_method = "full_scan",
+    lookup_seconds = 0,
+    query_seconds = 0,
+    parse_seconds = parse_seconds,
+    query_rows = nrow(phenotype_table),
+    modality_seconds = proc.time()[["elapsed"]] - modality_started
+  )
 }
 
 select_joint_phenotype_rows <- function(
@@ -360,7 +577,13 @@ prepare_trans_window_data <- function(
     output_dir,
     top_n_expression = 25L,
     top_n_splicing = 25L,
-    top_n_protein = 15L
+    top_n_protein = 15L,
+    expression_phenotypes_tbi = NULL,
+    expression_phenotype_lookup = NULL,
+    splicing_phenotypes_tbi = NULL,
+    splicing_phenotype_lookup = NULL,
+    protein_phenotypes_tbi = NULL,
+    protein_phenotype_lookup = NULL
 ) {
   prepare_log(paste0("Starting joint phenotype preparation for window ", window_id, "."))
   trans_associations <- normalize_trans_window_associations(trans_associations)
@@ -383,6 +606,28 @@ prepare_trans_window_data <- function(
   if (any(!file.exists(phenotype_inputs))) {
     stop("Every joint phenotype input file must exist.", call. = FALSE)
   }
+  indexed_inputs <- list(
+    expression = list(
+      index = expression_phenotypes_tbi,
+      lookup = expression_phenotype_lookup
+    ),
+    splicing = list(
+      index = splicing_phenotypes_tbi,
+      lookup = splicing_phenotype_lookup
+    ),
+    protein = list(
+      index = protein_phenotypes_tbi,
+      lookup = protein_phenotype_lookup
+    )
+  )
+  access_methods <- map_chr(required_joint_modalities(), function(modality) {
+    validate_indexed_input_pair(
+      indexed_inputs[[modality]]$index,
+      indexed_inputs[[modality]]$lookup,
+      modality
+    )
+  })
+  names(access_methods) <- required_joint_modalities()
   if (!file.exists(target_phenotypes)) {
     stop("The target phenotype input file does not exist.", call. = FALSE)
   }
@@ -421,26 +666,62 @@ prepare_trans_window_data <- function(
   }
 
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-  selected_tables <- map(required_joint_modalities(), function(modality) {
-    prepare_log(paste0("Reading and selecting ", modality, " phenotypes."))
-    phenotype_table <- read_prepare_phenotype_table(
-      phenotype_inputs[[modality]],
-      modality
-    )
+  access_results <- map(required_joint_modalities(), function(modality) {
     trans_ids <- selected_trans |>
       filter(.data$modality == !!modality) |>
       pull(.data$molecular_trait_id)
     target_ids <- targets |>
       filter(.data$modality == !!modality) |>
       pull(.data$phenotype_id)
-    select_joint_phenotype_rows(
-      phenotype_table,
+    requested_ids <- unique(c(trans_ids, target_ids))
+    prepare_log(sprintf(
+      "Reading and selecting %s phenotypes with %s access.",
+      modality,
+      access_methods[[modality]]
+    ))
+    access_result <- if (access_methods[[modality]] == "tabix") {
+      read_prepare_phenotype_table_indexed(
+        phenotype_inputs[[modality]],
+        indexed_inputs[[modality]]$index,
+        indexed_inputs[[modality]]$lookup,
+        modality,
+        requested_ids
+      )
+    } else {
+      prepare_log(paste0(
+        modality,
+        " indexed inputs are absent; reading the complete phenotype file."
+      ))
+      read_prepare_phenotype_table_full_scan(
+        phenotype_inputs[[modality]],
+        modality
+      )
+    }
+    access_result$table <- select_joint_phenotype_rows(
+      access_result$table,
       modality,
       trans_ids,
       target_ids
     )
+    prepare_log(sprintf(
+      paste0(
+        "%s phenotype access: method=%s, requested=%d, lookup=%.3fs, ",
+        "query=%.3fs, parse=%.3fs, query_rows=%d, retained=%d, total=%.3fs."
+      ),
+      modality,
+      access_result$access_method,
+      length(requested_ids),
+      access_result$lookup_seconds,
+      access_result$query_seconds,
+      access_result$parse_seconds,
+      access_result$query_rows,
+      nrow(access_result$table),
+      access_result$modality_seconds
+    ))
+    access_result
   })
-  names(selected_tables) <- required_joint_modalities()
+  names(access_results) <- required_joint_modalities()
+  selected_tables <- map(access_results, "table")
   contributing_tables <- keep(selected_tables, ~ nrow(.x) > 0L)
   if (!length(contributing_tables)) {
     stop("No outcomes were selected for window: ", window_id, call. = FALSE)
@@ -478,13 +759,11 @@ prepare_trans_window_data <- function(
   write_tsv(manifest, manifest_path)
 
   qc <- imap_dfr(selected_tables, function(selected, modality) {
+    access_result <- access_results[[modality]]
     tibble(
       window_id = window_id,
       modality = modality,
-      n_input = nrow(read_prepare_phenotype_table(
-        phenotype_inputs[[modality]],
-        modality
-      )),
+      n_input = access_result$n_input,
       n_trans_eligible = dplyr::n_distinct(
         window_associations$molecular_trait_id[
           window_associations$modality == modality
@@ -493,7 +772,13 @@ prepare_trans_window_data <- function(
       n_trans_selected = sum(selected_trans$modality == modality),
       n_targets = sum(targets$modality == modality),
       n_retained = nrow(selected),
-      top_n = top_n_by_modality[[modality]]
+      top_n = top_n_by_modality[[modality]],
+      access_method = access_result$access_method,
+      lookup_seconds = access_result$lookup_seconds,
+      query_seconds = access_result$query_seconds,
+      parse_seconds = access_result$parse_seconds,
+      query_rows = access_result$query_rows,
+      modality_seconds = access_result$modality_seconds
     )
   }) |>
     left_join(aligned$qc, by = "modality")

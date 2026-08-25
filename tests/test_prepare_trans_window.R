@@ -35,6 +35,66 @@ trans_associations <- read_tsv(
   show_col_types = FALSE
 )
 
+expect_error_matching(
+  validate_indexed_input_pair("file.tbi", NULL, "expression"),
+  "both.*index.*lookup"
+)
+expect_error_matching(
+  validate_indexed_input_pair(NULL, "lookup.tsv.gz", "expression"),
+  "both.*index.*lookup"
+)
+stopifnot(identical(
+  validate_indexed_input_pair(NULL, NULL, "expression"),
+  "full_scan"
+))
+
+valid_lookup_path <- fixture("valid_lookup.tsv.gz")
+write_tsv(
+  tibble(
+    phenotype_id = c("feature_1", "feature_2"),
+    chrom = c("chr1", "chr2"),
+    start = c("10", "20"),
+    end = c("15", "30")
+  ),
+  valid_lookup_path
+)
+valid_lookup <- read_phenotype_lookup(valid_lookup_path, "expression")
+stopifnot(
+  identical(names(valid_lookup), c("phenotype_id", "chrom", "start", "end")),
+  identical(valid_lookup$start, c(10L, 20L)),
+  identical(valid_lookup$end, c(15L, 30L))
+)
+
+duplicate_lookup_path <- fixture("duplicate_lookup.tsv.gz")
+write_tsv(
+  tibble(
+    phenotype_id = c("feature_1", "feature_1"),
+    chrom = c("chr1", "chr1"),
+    start = c(10L, 20L),
+    end = c(15L, 30L)
+  ),
+  duplicate_lookup_path
+)
+expect_error_matching(
+  read_phenotype_lookup(duplicate_lookup_path, "expression"),
+  "duplicate"
+)
+
+invalid_lookup_path <- fixture("invalid_lookup.tsv.gz")
+write_tsv(
+  tibble(
+    phenotype_id = "feature_1",
+    chrom = "chr1",
+    start = 20L,
+    end = 10L
+  ),
+  invalid_lookup_path
+)
+expect_error_matching(
+  read_phenotype_lookup(invalid_lookup_path, "expression"),
+  "coordinates"
+)
+
 # Workflow engines start the container in a task directory. The CLI must load
 # its helper relative to the installed script, not relative to that directory.
 cli_output_dir <- fixture("cli_from_external_workdir")
