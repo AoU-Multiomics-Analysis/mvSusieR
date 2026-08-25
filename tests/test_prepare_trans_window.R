@@ -132,6 +132,35 @@ stopifnot(all(vapply(c("expression", "splicing", "protein"), function(modality) 
   ))
 }, logical(1L))))
 
+protein_with_distinct_metadata <- read_tsv(
+  fixture("protein.bed.gz"),
+  show_col_types = FALSE
+)
+names(protein_with_distinct_metadata)[seq_len(4L)] <- c(
+  "#chrom", "chromStart", "chromEnd", "protein_id"
+)
+protein_with_distinct_metadata_path <- fixture(
+  "protein_distinct_metadata.bed.gz"
+)
+write_tsv(
+  protein_with_distinct_metadata,
+  protein_with_distinct_metadata_path
+)
+distinct_metadata_result <- prepare_trans_window_data(
+  "w1", trans_associations,
+  fixture("expression.bed.gz"), fixture("splicing.bed.gz"),
+  protein_with_distinct_metadata_path, fixture("target_phenotypes.tsv"),
+  fixture("distinct_metadata")
+)
+distinct_metadata_output <- read_tsv(
+  distinct_metadata_result$phenotype_data,
+  show_col_types = FALSE
+)
+stopifnot(identical(
+  names(distinct_metadata_output)[seq_len(4L)],
+  c("chrom", "start", "end", "phenotype_id")
+))
+
 disjoint_protein <- read_tsv(fixture("protein.bed.gz"), show_col_types = FALSE)
 names(disjoint_protein)[-(1:4)] <- c("2001", "2002", "2003")
 disjoint_protein_path <- fixture("disjoint_protein.bed.gz")

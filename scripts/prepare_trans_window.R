@@ -334,16 +334,18 @@ write_prepare_phenotype_subset <- function(selected_tables, output_dir) {
   output_tables <- map(selected_tables, function(selected) {
     output <- selected |> select(-starts_with("."))
     output[[4L]] <- selected$.outcome_key
+    names(output)[seq_len(4L)] <- c(
+      "chrom", "start", "end", "phenotype_id"
+    )
     output
   })
   if (length(unique(map(output_tables, names))) != 1L) {
     stop(
-      "Phenotype files must have identical metadata and sample columns.",
+      "Aligned phenotype files must have identical sample columns.",
       call. = FALSE
     )
   }
   output_table <- bind_rows(output_tables)
-  names(output_table)[seq_len(4L)] <- c("chrom", "start", "end", "phenotype_id")
   write_tsv(output_table, output_path)
   normalizePath(output_path, mustWork = TRUE)
 }
