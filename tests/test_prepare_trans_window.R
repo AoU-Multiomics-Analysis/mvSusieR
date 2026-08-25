@@ -35,6 +35,36 @@ trans_associations <- read_tsv(
   show_col_types = FALSE
 )
 
+# Workflow engines start the container in a task directory. The CLI must load
+# its helper relative to the installed script, not relative to that directory.
+cli_output_dir <- fixture("cli_from_external_workdir")
+external_workdir <- tempfile("prepare-trans-window-workdir-")
+dir.create(external_workdir)
+old_workdir <- getwd()
+setwd(external_workdir)
+cli_log <- system2(
+  command = "Rscript",
+  args = c(
+    shQuote(file.path(old_workdir, "scripts", "prepare_trans_window.R")),
+    "--window-id", "w1",
+    "--trans-associations", shQuote(fixture("trans_window_associations.tsv.gz")),
+    "--expression-phenotypes", shQuote(fixture("expression.bed.gz")),
+    "--splicing-phenotypes", shQuote(fixture("splicing.bed.gz")),
+    "--protein-phenotypes", shQuote(fixture("protein.bed.gz")),
+    "--target-phenotypes", shQuote(fixture("target_phenotypes.tsv")),
+    "--output-dir", shQuote(cli_output_dir)
+  ),
+  stdout = TRUE,
+  stderr = TRUE
+)
+setwd(old_workdir)
+stopifnot(
+  is.null(attr(cli_log, "status")),
+  file.exists(file.path(cli_output_dir, "window_phenotypes.tsv")),
+  file.exists(file.path(cli_output_dir, "window_phenotypes.bed.gz")),
+  file.exists(file.path(cli_output_dir, "window_qc.tsv"))
+)
+
 result <- prepare_trans_window_data(
   window_id = "w1",
   trans_associations = trans_associations,

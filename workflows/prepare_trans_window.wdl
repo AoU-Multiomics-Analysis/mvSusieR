@@ -59,8 +59,13 @@ task PrepareWindowGenotypes {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting genotype preparation for ~{window_id}."
     mkdir -p output
 
-    dosage_name="$(basename ~{genome_dosage})"
-    ln -sf ~{genome_dosage_tbi} "${dosage_name}.tbi"
+    dosage_name="window_input.dose.tsv.gz"
+    ln -sf "~{genome_dosage}" "${dosage_name}"
+    ln -sf "~{genome_dosage_tbi}" "${dosage_name}.tbi"
+    test -s "${dosage_name}"
+    test -s "${dosage_name}.tbi"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Local dosage: ${dosage_name}."
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Local index: ${dosage_name}.tbi."
 
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Resolving the locus coordinates."
     window_row="$(awk -F '\t' -v requested_id='~{window_id}' '
@@ -82,12 +87,14 @@ task PrepareWindowGenotypes {
     ' <(gzip -cd ~{trans_window_associations}))"
 
     IFS=$'\t' read -r window_chrom window_start window_end <<< "${window_row}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Interval: ${window_chrom}:$((window_start + 1))-${window_end}."
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracting all locus genotype rows."
     tabix -H "${dosage_name}" > output/window_dosage.tsv
     tabix "${dosage_name}" \
       "${window_chrom}:$((window_start + 1))-${window_end}" \
       >> output/window_dosage.tsv
     test "$(wc -l < output/window_dosage.tsv)" -gt 1
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted variants: $(( $(wc -l < output/window_dosage.tsv) - 1 ))."
 
     {
       printf 'window_id\tchrom\tstart\tend\tdosage_file\n'

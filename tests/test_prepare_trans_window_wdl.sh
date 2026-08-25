@@ -41,6 +41,10 @@ done
 
 rg -q 'call PrepareWindowGenotypes' workflows/prepare_trans_window.wdl
 rg -q 'call PrepareWindowPhenotypes' workflows/prepare_trans_window.wdl
+rg -Fq 'ln -sf "~{genome_dosage}" "${dosage_name}"' workflows/prepare_trans_window.wdl
+rg -Fq 'ln -sf "~{genome_dosage_tbi}" "${dosage_name}.tbi"' workflows/prepare_trans_window.wdl
+rg -Fq 'test -s "${dosage_name}"' workflows/prepare_trans_window.wdl
+rg -Fq 'test -s "${dosage_name}.tbi"' workflows/prepare_trans_window.wdl
 test "$(rg -c 'disks: "local-disk 500 SSD"' workflows/prepare_trans_window.wdl)" -eq 2
 test "$(rg -c 'memory: "16 GiB"' workflows/prepare_trans_window.wdl)" -eq 2
 

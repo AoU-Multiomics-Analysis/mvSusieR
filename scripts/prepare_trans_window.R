@@ -451,7 +451,25 @@ prepare_trans_window_data <- function(
 }
 
 main <- function() {
-  source("scripts/trans_window_cli.R")
+  file_argument <- grep(
+    "^--file=",
+    commandArgs(trailingOnly = FALSE),
+    value = TRUE
+  )
+  if (length(file_argument) != 1L) {
+    stop("Cannot determine the prepare_trans_window.R location.", call. = FALSE)
+  }
+  script_path <- normalizePath(
+    gsub(
+      "~+~",
+      " ",
+      sub("^--file=", "", file_argument[[1L]]),
+      fixed = TRUE
+    ),
+    mustWork = TRUE
+  )
+  source(file.path(dirname(script_path), "trans_window_cli.R"))
+  prepare_log(paste0("Loaded command-line helpers from ", dirname(script_path), "."))
   args <- parse_cli_args(
     option_list = list(
       optparse::make_option("--window-id", type = "character"),

@@ -50,6 +50,8 @@ jobs:
             stopifnot(file.exists("/opt/mvsusie/scripts/prepare_trans_window.R"))
             stopifnot(file.exists("/opt/mvsusie/scripts/trans_window_cli.R"))
           '
+          docker run --rm --workdir /tmp prepare-window-phenotypes-ci:latest \
+            Rscript /opt/mvsusie/scripts/prepare_trans_window.R --help >/dev/null
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
