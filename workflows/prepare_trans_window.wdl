@@ -10,6 +10,12 @@ workflow PrepareTransWindow {
     File splicing_phenotypes
     File protein_phenotypes
     File target_phenotypes
+    File? expression_phenotypes_tbi
+    File? expression_phenotype_lookup
+    File? splicing_phenotypes_tbi
+    File? splicing_phenotype_lookup
+    File? protein_phenotypes_tbi
+    File? protein_phenotype_lookup
     Int top_n_expression = 25
     Int top_n_splicing = 25
     Int top_n_protein = 15
@@ -31,6 +37,12 @@ workflow PrepareTransWindow {
       splicing_phenotypes = splicing_phenotypes,
       protein_phenotypes = protein_phenotypes,
       target_phenotypes = target_phenotypes,
+      expression_phenotypes_tbi = expression_phenotypes_tbi,
+      expression_phenotype_lookup = expression_phenotype_lookup,
+      splicing_phenotypes_tbi = splicing_phenotypes_tbi,
+      splicing_phenotype_lookup = splicing_phenotype_lookup,
+      protein_phenotypes_tbi = protein_phenotypes_tbi,
+      protein_phenotype_lookup = protein_phenotype_lookup,
       top_n_expression = top_n_expression,
       top_n_splicing = top_n_splicing,
       top_n_protein = top_n_protein
@@ -130,6 +142,12 @@ task PrepareWindowPhenotypes {
     File splicing_phenotypes
     File protein_phenotypes
     File target_phenotypes
+    File? expression_phenotypes_tbi
+    File? expression_phenotype_lookup
+    File? splicing_phenotypes_tbi
+    File? splicing_phenotype_lookup
+    File? protein_phenotypes_tbi
+    File? protein_phenotype_lookup
     Int top_n_expression
     Int top_n_splicing
     Int top_n_protein
@@ -140,6 +158,45 @@ task PrepareWindowPhenotypes {
 
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting joint phenotype preparation for ~{window_id}."
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Top-N values: expression=~{top_n_expression}, splicing=~{top_n_splicing}, protein=~{top_n_protein}."
+
+    expression_tbi='~{default="" expression_phenotypes_tbi}'
+    expression_lookup='~{default="" expression_phenotype_lookup}'
+    splicing_tbi='~{default="" splicing_phenotypes_tbi}'
+    splicing_lookup='~{default="" splicing_phenotype_lookup}'
+    protein_tbi='~{default="" protein_phenotypes_tbi}'
+    protein_lookup='~{default="" protein_phenotype_lookup}'
+
+    access_mode() {
+      if [[ -n "$1" && -n "$2" ]]; then
+        printf 'tabix'
+      elif [[ -z "$1" && -z "$2" ]]; then
+        printf 'full_scan'
+      else
+        printf 'incomplete'
+      fi
+    }
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Phenotype access: expression=$(access_mode "$expression_tbi" "$expression_lookup"), splicing=$(access_mode "$splicing_tbi" "$splicing_lookup"), protein=$(access_mode "$protein_tbi" "$protein_lookup")."
+
+    optional_args=()
+    if [[ -n "$expression_tbi" ]]; then
+      optional_args+=(--expression-phenotypes-tbi "$expression_tbi")
+    fi
+    if [[ -n "$expression_lookup" ]]; then
+      optional_args+=(--expression-phenotype-lookup "$expression_lookup")
+    fi
+    if [[ -n "$splicing_tbi" ]]; then
+      optional_args+=(--splicing-phenotypes-tbi "$splicing_tbi")
+    fi
+    if [[ -n "$splicing_lookup" ]]; then
+      optional_args+=(--splicing-phenotype-lookup "$splicing_lookup")
+    fi
+    if [[ -n "$protein_tbi" ]]; then
+      optional_args+=(--protein-phenotypes-tbi "$protein_tbi")
+    fi
+    if [[ -n "$protein_lookup" ]]; then
+      optional_args+=(--protein-phenotype-lookup "$protein_lookup")
+    fi
+
     Rscript /opt/mvsusie/scripts/prepare_trans_window.R \
       --window-id ~{window_id} \
       --trans-associations ~{trans_window_associations} \
@@ -150,6 +207,7 @@ task PrepareWindowPhenotypes {
       --top-n-expression ~{top_n_expression} \
       --top-n-splicing ~{top_n_splicing} \
       --top-n-protein ~{top_n_protein} \
+      "${optional_args[@]}" \
       --output-dir output
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Validating joint phenotype outputs."
     test -s output/window_phenotypes.tsv

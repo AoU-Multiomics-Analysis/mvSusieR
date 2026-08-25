@@ -11,10 +11,16 @@ for declaration in \
   'File splicing_phenotypes' \
   'File protein_phenotypes' \
   'File target_phenotypes' \
+  'File? expression_phenotypes_tbi' \
+  'File? expression_phenotype_lookup' \
+  'File? splicing_phenotypes_tbi' \
+  'File? splicing_phenotype_lookup' \
+  'File? protein_phenotypes_tbi' \
+  'File? protein_phenotype_lookup' \
   'Int top_n_expression = 25' \
   'Int top_n_splicing = 25' \
   'Int top_n_protein = 15'; do
-  rg -q "$declaration" workflows/prepare_trans_window.wdl
+  rg -Fq "$declaration" workflows/prepare_trans_window.wdl
 done
 
 for removed in \
@@ -32,6 +38,12 @@ for cli_flag in \
   expression-phenotypes \
   splicing-phenotypes \
   protein-phenotypes \
+  expression-phenotypes-tbi \
+  expression-phenotype-lookup \
+  splicing-phenotypes-tbi \
+  splicing-phenotype-lookup \
+  protein-phenotypes-tbi \
+  protein-phenotype-lookup \
   target-phenotypes \
   top-n-expression \
   top-n-splicing \

@@ -6,6 +6,9 @@ workflows:
   - name: prepare-trans-window
     subclass: WDL
     primaryDescriptorPath: /workflows/prepare_trans_window.wdl
+  - name: index-phenotype-bed
+    subclass: WDL
+    primaryDescriptorPath: /workflows/index_phenotype_bed.wdl
   - name: ld-pruning
     subclass: WDL
     primaryDescriptorPath: /workflows/ld_pruning.wdl

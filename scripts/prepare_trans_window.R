@@ -829,6 +829,12 @@ main <- function() {
       optparse::make_option("--expression-phenotypes", type = "character"),
       optparse::make_option("--splicing-phenotypes", type = "character"),
       optparse::make_option("--protein-phenotypes", type = "character"),
+      optparse::make_option("--expression-phenotypes-tbi", type = "character"),
+      optparse::make_option("--expression-phenotype-lookup", type = "character"),
+      optparse::make_option("--splicing-phenotypes-tbi", type = "character"),
+      optparse::make_option("--splicing-phenotype-lookup", type = "character"),
+      optparse::make_option("--protein-phenotypes-tbi", type = "character"),
+      optparse::make_option("--protein-phenotype-lookup", type = "character"),
       optparse::make_option("--target-phenotypes", type = "character"),
       optparse::make_option("--top-n-expression", type = "integer", default = 25L),
       optparse::make_option("--top-n-splicing", type = "integer", default = 25L),
@@ -850,7 +856,13 @@ main <- function() {
     output_dir = require_cli_arg(args, "output_dir"),
     top_n_expression = as_cli_integer(args, "top_n_expression", 25L),
     top_n_splicing = as_cli_integer(args, "top_n_splicing", 25L),
-    top_n_protein = as_cli_integer(args, "top_n_protein", 15L)
+    top_n_protein = as_cli_integer(args, "top_n_protein", 15L),
+    expression_phenotypes_tbi = args$expression_phenotypes_tbi,
+    expression_phenotype_lookup = args$expression_phenotype_lookup,
+    splicing_phenotypes_tbi = args$splicing_phenotypes_tbi,
+    splicing_phenotype_lookup = args$splicing_phenotype_lookup,
+    protein_phenotypes_tbi = args$protein_phenotypes_tbi,
+    protein_phenotype_lookup = args$protein_phenotype_lookup
   )
 
   prepare_log(paste0("Phenotype manifest saved: ", result$window_phenotypes))

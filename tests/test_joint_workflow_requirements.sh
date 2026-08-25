@@ -18,6 +18,12 @@ for contract in \
   'File splicing_phenotypes' \
   'File protein_phenotypes' \
   'File target_phenotypes' \
+  'File? expression_phenotypes_tbi' \
+  'File? expression_phenotype_lookup' \
+  'File? splicing_phenotypes_tbi' \
+  'File? splicing_phenotype_lookup' \
+  'File? protein_phenotypes_tbi' \
+  'File? protein_phenotype_lookup' \
   'Int top_n_expression = 25' \
   'Int top_n_splicing = 25' \
   'Int top_n_protein = 15'; do
