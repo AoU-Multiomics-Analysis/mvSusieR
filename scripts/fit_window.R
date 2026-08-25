@@ -1,5 +1,6 @@
 #!/usr/bin/env Rscript
 
+source("scripts/trans_window_io.R")
 source("scripts/trans_window_model.R")
 source("scripts/trans_window_prior.R")
 source("scripts/trans_window_cli.R")
@@ -7,6 +8,7 @@ source("scripts/trans_window_cli.R")
 args <- parse_cli_args(
   option_list = list(
     optparse::make_option("--prepared", type = "character"),
+    optparse::make_option("--window-id", type = "character"),
     optparse::make_option("--start-L", type = "integer", default = 10L),
     optparse::make_option("--step-L", type = "integer", default = 5L),
     optparse::make_option("--max-L", type = "integer", default = 40L),
@@ -25,12 +27,17 @@ args <- parse_cli_args(
     optparse::make_option("--mashr-strong-lfsr", type = "double", default = 0.05),
     optparse::make_option("--mashr-output", type = "character"),
     optparse::make_option("--greedy-history-output", type = "character"),
+    optparse::make_option("--covariate-provenance-output", type = "character"),
     optparse::make_option("--output", type = "character")
   ),
   description = "Fit mvSusieR for one prepared trans window."
 )
 pipeline_log("Reading prepared window data.")
 prepared <- readRDS(require_cli_arg(args, "prepared"))
+prepared <- validate_prepared_window(
+  prepared,
+  require_cli_arg(args, "window_id")
+)
 pipeline_log(sprintf(
   "Prepared data loaded: %d samples, %d variants, and %d outcomes.",
   nrow(prepared$X), ncol(prepared$X), ncol(prepared$Y)
@@ -76,4 +83,15 @@ data.table::fwrite(
   require_cli_arg(args, "greedy_history_output"),
   sep = "\t"
 )
+provenance_output <- require_cli_arg(args, "covariate_provenance_output")
+pipeline_log("Writing covariate provenance from the prepared window.")
+data.table::fwrite(
+  prepared$covariate_provenance,
+  provenance_output,
+  sep = "\t",
+  quote = FALSE
+)
+if (!file.exists(provenance_output) || file.info(provenance_output)$size == 0) {
+  stop("Failed to write covariate provenance: ", provenance_output, call. = FALSE)
+}
 pipeline_log("The mvSuSiE fit bundle was saved.")

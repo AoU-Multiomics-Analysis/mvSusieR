@@ -1,5 +1,16 @@
 source("scripts/trans_window_io.R")
 
+expect_error_matching <- function(expression, pattern) {
+  observed <- tryCatch(
+    {
+      force(expression)
+      NA_character_
+    },
+    error = function(condition) conditionMessage(condition)
+  )
+  stopifnot(!is.na(observed), grepl(pattern, observed, ignore.case = TRUE))
+}
+
 fixture_dir <- commandArgs(trailingOnly = TRUE)[[1L]]
 stopifnot(dir.exists(fixture_dir))
 fixture <- function(name) file.path(fixture_dir, name)
@@ -255,6 +266,15 @@ prepared <- prepare_joint_window_data(
   phenotype_data = phenotype_data,
   dosage = dosage,
   covariates_by_modality = raw_covariates_by_modality
+)
+stopifnot(inherits(validate_prepared_window(prepared, "w1"), "list"))
+expect_error_matching(
+  validate_prepared_window(list(X = matrix(1)), "w1"),
+  "missing required fields"
+)
+expect_error_matching(
+  validate_prepared_window(prepared, "wrong_window"),
+  "does not match requested window"
 )
 stopifnot(nrow(prepared$X) == length(prepared$samples))
 stopifnot(nrow(prepared$Y) == length(prepared$samples))

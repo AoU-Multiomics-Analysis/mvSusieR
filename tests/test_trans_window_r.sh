@@ -41,11 +41,13 @@ grep -q 'Prepared window data saved' "$tmp_dir/prepare_window.log"
 
 if Rscript scripts/fit_window.R \
   --prepared "$tmp_dir/standalone_prepared_window.rds" \
+  --window-id w1 \
   --start-L 10 \
   --step-L 0 \
   --max-L 40 \
   --mashr-output "$tmp_dir/invalid_mashr.rds" \
   --greedy-history-output "$tmp_dir/invalid_history.tsv" \
+  --covariate-provenance-output "$tmp_dir/invalid_provenance.tsv.gz" \
   --output "$tmp_dir/invalid_fit.rds" \
   >"$tmp_dir/invalid_fit.log" 2>&1; then
   echo "fit_window.R accepted a zero greedy L step." >&2
@@ -87,6 +89,7 @@ fi
 
 Rscript scripts/fit_window.R \
   --prepared "$tmp_dir/prepared_window.rds" \
+  --window-id w1 \
   --start-L 10 \
   --step-L 5 \
   --max-L 10 \
@@ -95,6 +98,7 @@ Rscript scripts/fit_window.R \
   --mashr-seed 1 \
   --mashr-output "$tmp_dir/resumed_mashr_training_bundle.rds" \
   --greedy-history-output "$tmp_dir/resumed_greedy_L_history.tsv" \
+  --covariate-provenance-output "$tmp_dir/resumed_covariate_provenance.tsv.gz" \
   --output "$tmp_dir/resumed_mvsusie_fit.rds" \
   2>&1 | tee "$tmp_dir/fit_window.log"
 
@@ -119,6 +123,7 @@ for output in \
   "$tmp_dir/prepared_window.rds" \
   "$tmp_dir/standalone_covariate_provenance.tsv.gz" \
   "$tmp_dir/covariate_provenance.tsv.gz" \
+  "$tmp_dir/resumed_covariate_provenance.tsv.gz" \
   "$tmp_dir/mvsusie_fit.rds" \
   "$tmp_dir/resumed_mvsusie_fit.rds" \
   "$tmp_dir/mashr_training_bundle.rds" \

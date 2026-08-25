@@ -83,6 +83,50 @@ numeric_matrix <- function(values, label) {
   out
 }
 
+validate_prepared_window <- function(prepared, expected_window_id) {
+  required <- c(
+    "window", "X", "Y", "variant_metadata", "phenotype_metadata",
+    "samples", "covariate_provenance", "covariate_rank",
+    "phenotype_covariate_rank", "qc"
+  )
+  missing <- setdiff(required, names(prepared))
+  if (length(missing)) {
+    stop(
+      "Prepared window is missing required fields: ",
+      paste(missing, collapse = ", "),
+      call. = FALSE
+    )
+  }
+  actual_window_id <- as.character(prepared$window$window_id)
+  if (
+    length(actual_window_id) != 1L || is.na(actual_window_id) ||
+    actual_window_id != expected_window_id
+  ) {
+    stop(
+      "Prepared window ID does not match requested window: ",
+      expected_window_id,
+      call. = FALSE
+    )
+  }
+  if (
+    !is.matrix(prepared$X) || !is.matrix(prepared$Y) ||
+    nrow(prepared$X) != nrow(prepared$Y) ||
+    nrow(prepared$X) != length(prepared$samples)
+  ) {
+    stop("Prepared X, Y, and samples must be aligned.", call. = FALSE)
+  }
+  if (
+    ncol(prepared$X) != nrow(prepared$variant_metadata) ||
+    ncol(prepared$Y) != nrow(prepared$phenotype_metadata)
+  ) {
+    stop("Prepared matrices and metadata must have matching sizes.", call. = FALSE)
+  }
+  if (!is.data.frame(prepared$covariate_provenance)) {
+    stop("Prepared covariate provenance must be a data frame.", call. = FALSE)
+  }
+  prepared
+}
+
 read_wide_dosage <- function(path) {
   dt <- fread(path, check.names = FALSE)
   required <- c("CHROM", "POS", "REF", "ALT")
