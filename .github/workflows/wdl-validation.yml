@@ -34,6 +34,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes ripgrep
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.6.25
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Check WDLs
         run: |
