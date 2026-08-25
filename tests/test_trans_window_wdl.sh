@@ -71,6 +71,27 @@ for output in prepared_window_output mvsusie_fit mashr_training greedy_L_history
   rg -q -e "^[[:space:]]+File ${output}[[:space:]]*=" "$workflow"
 done
 
+for filename in \
+  '.prepared_window.rds' \
+  '.mvsusie_fit.rds' \
+  '.mashr_training.rds' \
+  '.greedy_L_history.tsv' \
+  '.covariate_provenance.tsv.gz' \
+  '.run.stdout.log' \
+  '.run.stderr.log' \
+  '.session_info.txt' \
+  '.variant_pip.tsv.gz' \
+  '.credible_sets.tsv.gz' \
+  '.credible_set_members.tsv.gz' \
+  '.component_feature_support.tsv.gz' \
+  '.window_qc.tsv' \
+  '.effect_plot.png' \
+  '.effect_plot.pdf' \
+  '.effect_plot.rds'; do
+  rg -Fq "window_id + \"$filename\"" "$workflow"
+done
+rg -Fq 'File prepared_window_output = FitMvSusie.prepared_window_output' "$workflow"
+
 if rg -q 'canonical|extreme.deconvolution|mashr_use_ed|prior_method|L_greedy|component_effects|covariate_modalities|estimate_residual_variance|isoform' "$workflow"; then
   echo "The joint workflow contains a removed model or input mode." >&2
   exit 1

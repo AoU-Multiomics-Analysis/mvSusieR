@@ -68,6 +68,11 @@ task PrepareWindowGenotypes {
   command <<<
     set -euo pipefail
 
+    output_prefix='~{window_id}'
+    if [[ ! "$output_prefix" =~ ^[A-Za-z0-9._-]+$ ]]; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: window_id contains unsafe filename characters." >&2
+      exit 1
+    fi
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting genotype preparation for ~{window_id}."
     mkdir -p output
 
@@ -101,12 +106,12 @@ task PrepareWindowGenotypes {
     IFS=$'\t' read -r window_chrom window_start window_end <<< "${window_row}"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Interval: ${window_chrom}:$((window_start + 1))-${window_end}."
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracting all locus genotype rows."
-    tabix -H "${dosage_name}" > output/window_dosage.tsv
+    tabix -H "${dosage_name}" > "output/${output_prefix}.window_dosage.tsv"
     tabix "${dosage_name}" \
       "${window_chrom}:$((window_start + 1))-${window_end}" \
-      >> output/window_dosage.tsv
-    test "$(wc -l < output/window_dosage.tsv)" -gt 1
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted variants: $(( $(wc -l < output/window_dosage.tsv) - 1 ))."
+      >> "output/${output_prefix}.window_dosage.tsv"
+    test "$(wc -l < "output/${output_prefix}.window_dosage.tsv")" -gt 1
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted variants: $(( $(wc -l < "output/${output_prefix}.window_dosage.tsv") - 1 ))."
 
     {
       printf 'window_id\tchrom\tstart\tend\tdosage_file\n'
@@ -115,15 +120,15 @@ task PrepareWindowGenotypes {
         "${window_chrom}" \
         "${window_start}" \
         "${window_end}" \
-        'window_dosage.tsv'
-    } > output/window_manifest.tsv
-    test -s output/window_manifest.tsv
+        "${output_prefix}.window_dosage.tsv"
+    } > "output/${output_prefix}.window_manifest.tsv"
+    test -s "output/${output_prefix}.window_manifest.tsv"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Genotype preparation complete."
   >>>
 
   output {
-    File window_dosage = "output/window_dosage.tsv"
-    File window_manifest = "output/window_manifest.tsv"
+    File window_dosage = "output/" + window_id + ".window_dosage.tsv"
+    File window_manifest = "output/" + window_id + ".window_manifest.tsv"
   }
 
   runtime {
@@ -156,6 +161,11 @@ task PrepareWindowPhenotypes {
   command <<<
     set -euo pipefail
 
+    output_prefix='~{window_id}'
+    if [[ ! "$output_prefix" =~ ^[A-Za-z0-9._-]+$ ]]; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: window_id contains unsafe filename characters." >&2
+      exit 1
+    fi
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting joint phenotype preparation for ~{window_id}."
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Top-N values: expression=~{top_n_expression}, splicing=~{top_n_splicing}, protein=~{top_n_protein}."
 
@@ -210,16 +220,16 @@ task PrepareWindowPhenotypes {
       "${optional_args[@]}" \
       --output-dir output
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Validating joint phenotype outputs."
-    test -s output/window_phenotypes.tsv
-    test -s output/window_phenotypes.bed.gz
-    test -s output/window_qc.tsv
+    test -s "output/${output_prefix}.window_phenotypes.tsv"
+    test -s "output/${output_prefix}.window_phenotypes.bed.gz"
+    test -s "output/${output_prefix}.window_qc.tsv"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Joint phenotype preparation complete."
   >>>
 
   output {
-    File window_phenotypes = "output/window_phenotypes.tsv"
-    File phenotype_data = "output/window_phenotypes.bed.gz"
-    File window_qc = "output/window_qc.tsv"
+    File window_phenotypes = "output/" + window_id + ".window_phenotypes.tsv"
+    File phenotype_data = "output/" + window_id + ".window_phenotypes.bed.gz"
+    File window_qc = "output/" + window_id + ".window_qc.tsv"
   }
 
   runtime {

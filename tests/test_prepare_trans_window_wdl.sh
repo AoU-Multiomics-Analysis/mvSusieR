@@ -57,6 +57,15 @@ rg -Fq 'ln -sf "~{genome_dosage}" "${dosage_name}"' workflows/prepare_trans_wind
 rg -Fq 'ln -sf "~{genome_dosage_tbi}" "${dosage_name}.tbi"' workflows/prepare_trans_window.wdl
 rg -Fq 'test -s "${dosage_name}"' workflows/prepare_trans_window.wdl
 rg -Fq 'test -s "${dosage_name}.tbi"' workflows/prepare_trans_window.wdl
+for filename in \
+  '.window_dosage.tsv' \
+  '.window_manifest.tsv' \
+  '.window_phenotypes.tsv' \
+  '.window_phenotypes.bed.gz' \
+  '.window_qc.tsv'; do
+  rg -Fq "\"output/\" + window_id + \"$filename\"" \
+    workflows/prepare_trans_window.wdl
+done
 test "$(rg -c 'disks: "local-disk 500 SSD"' workflows/prepare_trans_window.wdl)" -eq 2
 test "$(rg -c 'memory: "16 GiB"' workflows/prepare_trans_window.wdl)" -eq 2
 

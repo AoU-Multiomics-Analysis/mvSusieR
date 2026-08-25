@@ -64,6 +64,20 @@ The phenotype task uses the intersection of samples in the nonempty assay
 files. It reports the input, retained, and removed sample counts for each
 contributing assay. A missing modality does not reduce the sample set.
 
+Each preparation output starts with the `window_id`. For example, window
+`chr7_50000000_52000000` writes:
+
+```text
+chr7_50000000_52000000.window_dosage.tsv
+chr7_50000000_52000000.window_manifest.tsv
+chr7_50000000_52000000.window_phenotypes.tsv
+chr7_50000000_52000000.window_phenotypes.bed.gz
+chr7_50000000_52000000.window_qc.tsv
+```
+
+The `window_id` can contain letters, numbers, periods, underscores, and
+hyphens. The workflow rejects other characters before it writes output files.
+
 ### Use indexed phenotype access
 
 `PrepareTransWindow` has two optional companion inputs for each modality:
@@ -90,7 +104,8 @@ intervals can add records to a coordinate query. Full-scan and tabix access
 use the same feature selection, sample intersection, output writer, and error
 checks.
 
-`window_qc.tsv` reports these access fields for each modality:
+The window-prefixed `window_qc.tsv` reports these access fields for each
+modality:
 
 ```text
 access_method  lookup_seconds  query_seconds  parse_seconds  query_rows  modality_seconds
@@ -178,6 +193,30 @@ For one window, the workflow writes scalar outputs:
 - component support by feature, including lfsr and outcome log Bayes factor;
 - window QC;
 - PNG, PDF, and RDS plot outputs.
+
+Each file starts with the `window_id`. For window `w1`, the file basenames are:
+
+```text
+w1.prepared_window.rds
+w1.mvsusie_fit.rds
+w1.mashr_training.rds
+w1.greedy_L_history.tsv
+w1.covariate_provenance.tsv.gz
+w1.variant_pip.tsv.gz
+w1.credible_sets.tsv.gz
+w1.credible_set_members.tsv.gz
+w1.component_feature_support.tsv.gz
+w1.window_qc.tsv
+w1.effect_plot.png
+w1.effect_plot.pdf
+w1.effect_plot.rds
+w1.run.stdout.log
+w1.run.stderr.log
+w1.session_info.txt
+```
+
+Raw mode and prepared mode use the same output names. The workflow output
+variable names do not change.
 
 The workflow does not merge results across windows. Run
 `scripts/merge_window_outputs.R` after all window jobs finish. The model does

@@ -31,6 +31,7 @@ workflow TransWindowMvSusie {
 
   call ValidateMvSusieInputs {
     input:
+      window_id = window_id,
       has_prepared_window = defined(prepared_window),
       has_window_manifest = defined(window_manifest),
       has_window_phenotypes_tsv = defined(window_phenotypes_tsv),
@@ -45,7 +46,7 @@ workflow TransWindowMvSusie {
   if (ValidateMvSusieInputs.run_preparation) {
     call PrepareMvSusieInput {
       input:
-        window_id = window_id,
+        window_id = ValidateMvSusieInputs.validated_window_id,
         window_manifest = select_first([window_manifest]),
         window_phenotypes_tsv = select_first([window_phenotypes_tsv]),
         dosage = select_first([dosage]),
@@ -64,7 +65,7 @@ workflow TransWindowMvSusie {
 
   call FitMvSusie {
     input:
-      window_id = window_id,
+      window_id = ValidateMvSusieInputs.validated_window_id,
       prepared_window = resolved_prepared_window,
       start_L = start_L,
       step_L = step_L,
@@ -83,20 +84,22 @@ workflow TransWindowMvSusie {
 
   call SummarizeMvSusie {
     input:
-      prepared_window = resolved_prepared_window,
+      window_id = ValidateMvSusieInputs.validated_window_id,
+      prepared_window = FitMvSusie.prepared_window_output,
       mvsusie_fit = FitMvSusie.mvsusie_fit,
       docker_image = docker_image
   }
 
   call PlotMvSusie {
     input:
-      prepared_window = resolved_prepared_window,
+      window_id = ValidateMvSusieInputs.validated_window_id,
+      prepared_window = FitMvSusie.prepared_window_output,
       mvsusie_fit = FitMvSusie.mvsusie_fit,
       docker_image = docker_image
   }
 
   output {
-    File prepared_window_output = resolved_prepared_window
+    File prepared_window_output = FitMvSusie.prepared_window_output
     File mvsusie_fit = FitMvSusie.mvsusie_fit
     File mashr_training = FitMvSusie.mashr_training
     File greedy_L_history = FitMvSusie.greedy_L_history
@@ -117,6 +120,7 @@ workflow TransWindowMvSusie {
 
 task ValidateMvSusieInputs {
   input {
+    String window_id
     Boolean has_prepared_window
     Boolean has_window_manifest
     Boolean has_window_phenotypes_tsv
@@ -133,6 +137,13 @@ task ValidateMvSusieInputs {
     log() {
       printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
     }
+
+    window_id='~{window_id}'
+    if [[ ! "$window_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
+      log "window_id may contain letters, numbers, periods, underscores, and hyphens only."
+      exit 1
+    fi
+    printf '%s\n' "$window_id" > validated_window_id.txt
 
     if ~{has_prepared_window}; then
       log "A prepared window is present. The workflow will skip phenotype and genotype preparation."
@@ -161,6 +172,7 @@ task ValidateMvSusieInputs {
 
   output {
     Boolean run_preparation = read_boolean("run_preparation.txt")
+    String validated_window_id = read_string("validated_window_id.txt")
   }
 
   runtime {
@@ -189,6 +201,9 @@ task PrepareMvSusieInput {
 
   command <<<
     set -euo pipefail
+    output_prefix='~{window_id}'
+    exec > >(tee "${output_prefix}.preparation.stdout.log") \
+      2> >(tee "${output_prefix}.preparation.stderr.log" >&2)
     log() {
       printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
     }
@@ -206,19 +221,19 @@ task PrepareMvSusieInput {
       ~{if defined(keep_samples) then "--keep-samples " + select_first([keep_samples]) else ""} \
       --min-genotype-variance ~{min_genotype_variance} \
       --min-phenotype-variance ~{min_phenotype_variance} \
-      --covariate-provenance-output preparation_covariate_provenance.tsv.gz \
-      --output prepared_window.rds
+      --covariate-provenance-output "${output_prefix}.preparation_covariate_provenance.tsv.gz" \
+      --output "${output_prefix}.prepared_window.rds"
     log "Verifying the prepared window for ~{window_id}."
-    test -s prepared_window.rds
-    test -s preparation_covariate_provenance.tsv.gz
+    test -s "${output_prefix}.prepared_window.rds"
+    test -s "${output_prefix}.preparation_covariate_provenance.tsv.gz"
     log "Completed preparation for ~{window_id}."
   >>>
 
   output {
-    File prepared_window = "prepared_window.rds"
-    File covariate_provenance = "preparation_covariate_provenance.tsv.gz"
-    File preparation_stdout = stdout()
-    File preparation_stderr = stderr()
+    File prepared_window = window_id + ".prepared_window.rds"
+    File covariate_provenance = window_id + ".preparation_covariate_provenance.tsv.gz"
+    File preparation_stdout = window_id + ".preparation.stdout.log"
+    File preparation_stderr = window_id + ".preparation.stderr.log"
   }
 
   runtime {
@@ -250,15 +265,19 @@ task FitMvSusie {
 
   command <<<
     set -euo pipefail
+    output_prefix='~{window_id}'
+    exec > >(tee "${output_prefix}.run.stdout.log") \
+      2> >(tee "${output_prefix}.run.stderr.log" >&2)
     log() {
       printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
     }
 
+    cp '~{prepared_window}' "${output_prefix}.prepared_window.rds"
     log "Starting joint mvSuSiE for ~{window_id}. The task has 8 GiB of memory."
     log "Greedy L starts at ~{start_L}, increases by ~{step_L}, and stops at ~{max_L}; the cutoff is ~{greedy_lbf_cutoff}."
     log "The fit is verbose. Iteration updates will be present in the task log."
     Rscript /opt/mvsusie/scripts/fit_window.R \
-      --prepared ~{prepared_window} \
+      --prepared "${output_prefix}.prepared_window.rds" \
       --window-id ~{window_id} \
       --start-L ~{start_L} \
       --step-L ~{step_L} \
@@ -272,29 +291,32 @@ task FitMvSusie {
       --mashr-n-pca ~{mashr_n_pca} \
       --mashr-strong-lfsr ~{mashr_strong_lfsr} \
       ~{if defined(mashr_seed) then "--mashr-seed " + select_first([mashr_seed]) else ""} \
-      --covariate-provenance-output covariate_provenance.tsv.gz \
-      --mashr-output mashr_training.rds \
-      --greedy-history-output greedy_L_history.tsv \
-      --output mvsusie_fit.rds
+      --covariate-provenance-output "${output_prefix}.covariate_provenance.tsv.gz" \
+      --mashr-output "${output_prefix}.mashr_training.rds" \
+      --greedy-history-output "${output_prefix}.greedy_L_history.tsv" \
+      --output "${output_prefix}.mvsusie_fit.rds"
     log "Writing the R session information."
-    Rscript -e 'writeLines(capture.output(sessionInfo()), "session_info.txt")'
+    Rscript -e 'writeLines(capture.output(sessionInfo()), commandArgs(TRUE)[[1L]])' \
+      "${output_prefix}.session_info.txt"
     log "Verifying the joint model outputs for ~{window_id}."
-    test -s mvsusie_fit.rds
-    test -s mashr_training.rds
-    test -s greedy_L_history.tsv
-    test -s covariate_provenance.tsv.gz
-    test -s session_info.txt
+    test -s "${output_prefix}.prepared_window.rds"
+    test -s "${output_prefix}.mvsusie_fit.rds"
+    test -s "${output_prefix}.mashr_training.rds"
+    test -s "${output_prefix}.greedy_L_history.tsv"
+    test -s "${output_prefix}.covariate_provenance.tsv.gz"
+    test -s "${output_prefix}.session_info.txt"
     log "Completed joint mvSuSiE for ~{window_id}."
   >>>
 
   output {
-    File mvsusie_fit = "mvsusie_fit.rds"
-    File mashr_training = "mashr_training.rds"
-    File greedy_L_history = "greedy_L_history.tsv"
-    File covariate_provenance = "covariate_provenance.tsv.gz"
-    File run_stdout = stdout()
-    File run_stderr = stderr()
-    File session_info = "session_info.txt"
+    File prepared_window_output = window_id + ".prepared_window.rds"
+    File mvsusie_fit = window_id + ".mvsusie_fit.rds"
+    File mashr_training = window_id + ".mashr_training.rds"
+    File greedy_L_history = window_id + ".greedy_L_history.tsv"
+    File covariate_provenance = window_id + ".covariate_provenance.tsv.gz"
+    File run_stdout = window_id + ".run.stdout.log"
+    File run_stderr = window_id + ".run.stderr.log"
+    File session_info = window_id + ".session_info.txt"
   }
 
   runtime {
@@ -307,6 +329,7 @@ task FitMvSusie {
 
 task SummarizeMvSusie {
   input {
+    String window_id
     File prepared_window
     File mvsusie_fit
     String docker_image
@@ -314,6 +337,7 @@ task SummarizeMvSusie {
 
   command <<<
     set -euo pipefail
+    output_prefix='~{window_id}'
     log() {
       printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
     }
@@ -323,21 +347,26 @@ task SummarizeMvSusie {
       --prepared ~{prepared_window} \
       --fit ~{mvsusie_fit} \
       --output-dir window_outputs
+    mv window_outputs/variant_pip.tsv.gz "${output_prefix}.variant_pip.tsv.gz"
+    mv window_outputs/credible_sets.tsv.gz "${output_prefix}.credible_sets.tsv.gz"
+    mv window_outputs/credible_set_members.tsv.gz "${output_prefix}.credible_set_members.tsv.gz"
+    mv window_outputs/component_feature_support.tsv.gz "${output_prefix}.component_feature_support.tsv.gz"
+    mv window_outputs/window_qc.tsv "${output_prefix}.window_qc.tsv"
     log "Verifying the joint mvSuSiE summary outputs."
-    test -s window_outputs/variant_pip.tsv.gz
-    test -e window_outputs/credible_sets.tsv.gz
-    test -e window_outputs/credible_set_members.tsv.gz
-    test -s window_outputs/component_feature_support.tsv.gz
-    test -s window_outputs/window_qc.tsv
+    test -s "${output_prefix}.variant_pip.tsv.gz"
+    test -e "${output_prefix}.credible_sets.tsv.gz"
+    test -e "${output_prefix}.credible_set_members.tsv.gz"
+    test -s "${output_prefix}.component_feature_support.tsv.gz"
+    test -s "${output_prefix}.window_qc.tsv"
     log "Completed the joint mvSuSiE summary."
   >>>
 
   output {
-    File variant_pip = "window_outputs/variant_pip.tsv.gz"
-    File credible_sets = "window_outputs/credible_sets.tsv.gz"
-    File credible_set_members = "window_outputs/credible_set_members.tsv.gz"
-    File component_feature_support = "window_outputs/component_feature_support.tsv.gz"
-    File window_qc = "window_outputs/window_qc.tsv"
+    File variant_pip = window_id + ".variant_pip.tsv.gz"
+    File credible_sets = window_id + ".credible_sets.tsv.gz"
+    File credible_set_members = window_id + ".credible_set_members.tsv.gz"
+    File component_feature_support = window_id + ".component_feature_support.tsv.gz"
+    File window_qc = window_id + ".window_qc.tsv"
   }
 
   runtime {
@@ -350,6 +379,7 @@ task SummarizeMvSusie {
 
 task PlotMvSusie {
   input {
+    String window_id
     File prepared_window
     File mvsusie_fit
     String docker_image
@@ -357,6 +387,7 @@ task PlotMvSusie {
 
   command <<<
     set -euo pipefail
+    output_prefix='~{window_id}'
     log() {
       printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
     }
@@ -364,20 +395,20 @@ task PlotMvSusie {
     Rscript /opt/mvsusie/scripts/plot_window_mvsusie.R \
       --prepared ~{prepared_window} \
       --fit ~{mvsusie_fit} \
-      --png effect_plot.png \
-      --pdf effect_plot.pdf \
-      --plot-rds effect_plot.rds
+      --png "${output_prefix}.effect_plot.png" \
+      --pdf "${output_prefix}.effect_plot.pdf" \
+      --plot-rds "${output_prefix}.effect_plot.rds"
     log "Verifying the mvSuSiE plot outputs."
-    test -s effect_plot.png
-    test -s effect_plot.pdf
-    test -s effect_plot.rds
+    test -s "${output_prefix}.effect_plot.png"
+    test -s "${output_prefix}.effect_plot.pdf"
+    test -s "${output_prefix}.effect_plot.rds"
     log "Completed the mvSuSiE credible-set-by-feature plot."
   >>>
 
   output {
-    File effect_plot_png = "effect_plot.png"
-    File effect_plot_pdf = "effect_plot.pdf"
-    File effect_plot_rds = "effect_plot.rds"
+    File effect_plot_png = window_id + ".effect_plot.png"
+    File effect_plot_pdf = window_id + ".effect_plot.pdf"
+    File effect_plot_rds = window_id + ".effect_plot.rds"
   }
 
   runtime {

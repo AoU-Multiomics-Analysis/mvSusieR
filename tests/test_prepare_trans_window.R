@@ -120,9 +120,9 @@ cli_log <- system2(
 setwd(old_workdir)
 stopifnot(
   is.null(attr(cli_log, "status")),
-  file.exists(file.path(cli_output_dir, "window_phenotypes.tsv")),
-  file.exists(file.path(cli_output_dir, "window_phenotypes.bed.gz")),
-  file.exists(file.path(cli_output_dir, "window_qc.tsv"))
+  file.exists(file.path(cli_output_dir, "w1.window_phenotypes.tsv")),
+  file.exists(file.path(cli_output_dir, "w1.window_phenotypes.bed.gz")),
+  file.exists(file.path(cli_output_dir, "w1.window_qc.tsv"))
 )
 
 prepare_messages <- capture.output(
@@ -139,6 +139,11 @@ prepare_messages <- capture.output(
 )
 
 manifest <- read_tsv(result$window_phenotypes, show_col_types = FALSE)
+stopifnot(
+  identical(basename(result$window_phenotypes), "w1.window_phenotypes.tsv"),
+  identical(basename(result$phenotype_data), "w1.window_phenotypes.bed.gz"),
+  identical(basename(result$window_qc), "w1.window_qc.tsv")
+)
 expected_columns <- c(
   "window_id", "outcome_key", "phenotype_id", "modality", "phenotype_file"
 )
@@ -151,6 +156,7 @@ stopifnot(identical(
   paste(manifest$modality, manifest$phenotype_id, sep = "::")
 ))
 stopifnot(!anyDuplicated(manifest$outcome_key))
+stopifnot(all(manifest$phenotype_file == "w1.window_phenotypes.bed.gz"))
 stopifnot(all(c(
   "expression::expr_target",
   "splicing::splice_target_1",
@@ -354,6 +360,16 @@ expect_error_matching(
     fixture("duplicate_target")
   ),
   "target.*duplicate"
+)
+
+expect_error_matching(
+  prepare_trans_window_data(
+    "../unsafe", trans_associations,
+    fixture("expression.bed.gz"), fixture("splicing.bed.gz"),
+    fixture("protein.bed.gz"), fixture("target_phenotypes.tsv"),
+    fixture("unsafe_window")
+  ),
+  "window_id.*letters.*numbers"
 )
 
 message("Joint preparation tests passed")

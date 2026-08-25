@@ -12,6 +12,7 @@ on:
       - "scripts/index_phenotype_bed.sh"
       - "tests/fixtures/trans_window/generate_index_fixture.R"
       - "tests/test_index_phenotype_bed.sh"
+      - "tests/test_prepare_trans_window.R"
       - "tests/test_prepare_trans_window_indexed.R"
   pull_request:
     branches: [main]
@@ -23,6 +24,7 @@ on:
       - "scripts/index_phenotype_bed.sh"
       - "tests/fixtures/trans_window/generate_index_fixture.R"
       - "tests/test_index_phenotype_bed.sh"
+      - "tests/test_prepare_trans_window.R"
       - "tests/test_prepare_trans_window_indexed.R"
 
 env:

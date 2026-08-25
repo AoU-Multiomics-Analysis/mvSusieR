@@ -11,6 +11,20 @@ prepare_log <- function(message_text) {
   message(format(Sys.time(), "[%Y-%m-%d %H:%M:%S] "), message_text)
 }
 
+validate_output_window_id <- function(window_id) {
+  window_id <- as.character(window_id)
+  if (
+    length(window_id) != 1L || is.na(window_id) || !nzchar(window_id) ||
+    !grepl("^[A-Za-z0-9._-]+$", window_id)
+  ) {
+    stop(
+      "window_id may contain letters, numbers, periods, underscores, and hyphens only.",
+      call. = FALSE
+    )
+  }
+  window_id
+}
+
 require_columns <- function(data, required, label) {
   missing <- setdiff(required, names(data))
   if (length(missing) > 0L) {
@@ -546,8 +560,11 @@ align_prepare_phenotype_samples <- function(selected_tables) {
   list(tables = aligned, qc = qc, shared_samples = shared)
 }
 
-write_prepare_phenotype_subset <- function(selected_tables, output_dir) {
-  output_path <- file.path(output_dir, "window_phenotypes.bed.gz")
+write_prepare_phenotype_subset <- function(selected_tables, output_dir, window_id) {
+  output_path <- file.path(
+    output_dir,
+    paste0(window_id, ".window_phenotypes.bed.gz")
+  )
   output_tables <- map(selected_tables, function(selected) {
     output <- selected |> select(-starts_with("."))
     output[[4L]] <- selected$.outcome_key
@@ -585,6 +602,7 @@ prepare_trans_window_data <- function(
     protein_phenotypes_tbi = NULL,
     protein_phenotype_lookup = NULL
 ) {
+  window_id <- validate_output_window_id(window_id)
   prepare_log(paste0("Starting joint phenotype preparation for window ", window_id, "."))
   trans_associations <- normalize_trans_window_associations(trans_associations)
   window_associations <- trans_associations |>
@@ -740,7 +758,8 @@ prepare_trans_window_data <- function(
 
   phenotype_data_path <- write_prepare_phenotype_subset(
     aligned$tables,
-    output_dir
+    output_dir,
+    window_id
   )
   manifest <- imap_dfr(aligned$tables, function(selected, modality) {
     tibble(
@@ -755,7 +774,10 @@ prepare_trans_window_data <- function(
     stop("Joint phenotype outcome keys must be unique.", call. = FALSE)
   }
 
-  manifest_path <- file.path(output_dir, "window_phenotypes.tsv")
+  manifest_path <- file.path(
+    output_dir,
+    paste0(window_id, ".window_phenotypes.tsv")
+  )
   write_tsv(manifest, manifest_path)
 
   qc <- imap_dfr(selected_tables, function(selected, modality) {
@@ -782,7 +804,7 @@ prepare_trans_window_data <- function(
     )
   }) |>
     left_join(aligned$qc, by = "modality")
-  qc_path <- file.path(output_dir, "window_qc.tsv")
+  qc_path <- file.path(output_dir, paste0(window_id, ".window_qc.tsv"))
   write_tsv(qc, qc_path)
 
   required_outputs <- c(phenotype_data_path, manifest_path, qc_path)
