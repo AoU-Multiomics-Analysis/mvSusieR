@@ -95,15 +95,24 @@ read_result <- function(result) {
   )
 }
 
+expect_identical <- function(actual, expected, label) {
+  actual_values <- as.data.frame(actual, stringsAsFactors = FALSE)
+  expected_values <- as.data.frame(expected, stringsAsFactors = FALSE)
+  if (!identical(actual_values, expected_values)) {
+    difference <- all.equal(actual_values, expected_values)
+    stop(label, ": ", paste(difference, collapse = "; "), call. = FALSE)
+  }
+}
+
 full <- read_result(full_result)
 indexed <- read_result(indexed_result)
 mixed <- read_result(mixed_result)
 
+expect_identical(full$manifest, indexed$manifest, "Indexed manifest differs")
+expect_identical(full$phenotypes, indexed$phenotypes, "Indexed phenotypes differ")
+expect_identical(full$manifest, mixed$manifest, "Mixed manifest differs")
+expect_identical(full$phenotypes, mixed$phenotypes, "Mixed phenotypes differ")
 stopifnot(
-  identical(full$manifest, indexed$manifest),
-  identical(full$phenotypes, indexed$phenotypes),
-  identical(full$manifest, mixed$manifest),
-  identical(full$phenotypes, mixed$phenotypes),
   !anyDuplicated(indexed$manifest$outcome_key),
   !anyDuplicated(mixed$manifest$outcome_key)
 )
@@ -115,12 +124,12 @@ preexisting_qc_columns <- c(
 )
 stopifnot(
   identical(
-    full$qc[preexisting_qc_columns],
-    indexed$qc[preexisting_qc_columns]
+    as.data.frame(full$qc[preexisting_qc_columns]),
+    as.data.frame(indexed$qc[preexisting_qc_columns])
   ),
   identical(
-    full$qc[preexisting_qc_columns],
-    mixed$qc[preexisting_qc_columns]
+    as.data.frame(full$qc[preexisting_qc_columns]),
+    as.data.frame(mixed$qc[preexisting_qc_columns])
   ),
   identical(indexed$qc$access_method, rep("tabix", 3L)),
   identical(mixed$qc$access_method, c("tabix", "full_scan", "tabix")),
