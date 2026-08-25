@@ -37,11 +37,19 @@ measurements while keeping filtering and quantification in one task. See the
 
 ### Trans-window data preparation
 
+[`IndexPhenotypeBed`](workflows/index_phenotype_bed.wdl) prepares one reusable
+BGZF phenotype file, tabix index, phenotype-coordinate lookup, and QC table.
+Run it once for each expression, splicing, and protein source file. This step
+lets window jobs retrieve selected phenotype rows without reading each full
+matrix.
+
 [`PrepareTransWindow`](workflows/prepare_trans_window.wdl) extracts the dosage
 records and selects expression, splicing, and protein features for one trans
 window. The default selection uses the top 25 trans expression features, top
 25 trans splicing features, and top 15 trans protein features. It also keeps
-the requested target expression and splicing features.
+the requested target expression and splicing features. Indexed phenotype
+inputs are optional. The workflow keeps the full-scan path for existing input
+JSON files and supports a different access method for each modality.
 
 ### Trans-window multivariate fine-mapping
 

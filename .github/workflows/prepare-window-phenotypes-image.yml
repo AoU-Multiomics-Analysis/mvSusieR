@@ -64,14 +64,6 @@ jobs:
           docker run --rm --workdir /tmp prepare-window-phenotypes-ci:latest \
             Rscript /opt/mvsusie/scripts/prepare_trans_window.R --help >/dev/null
 
-      - name: Test phenotype alignment in the image
-        run: |
-          docker run --rm \
-            -v "$PWD:/workspace" \
-            -w /workspace \
-            prepare-window-phenotypes-ci:latest \
-            Rscript tests/test_prepare_trans_window.R
-
       - name: Test phenotype indexing in the image
         run: |
           docker run --rm \
@@ -79,6 +71,14 @@ jobs:
             -w /workspace \
             prepare-window-phenotypes-ci:latest \
             bash tests/test_index_phenotype_bed.sh
+
+      - name: Test phenotype alignment in the image
+        run: |
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            prepare-window-phenotypes-ci:latest \
+            Rscript tests/test_prepare_trans_window.R
 
       - name: Test indexed phenotype preparation in the image
         run: |

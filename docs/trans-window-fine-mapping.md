@@ -1,9 +1,30 @@
 # Joint trans-window fine-mapping
 
-The pipeline has two workflows. `PrepareTransWindow` creates the locus dosage
-and joint phenotype inputs. `TransWindowMvSusie` processes one locus per
-workflow launch. It preprocesses expression, splicing, and protein data and
-fits one joint mvSuSiE model.
+The pipeline has three workflows. `IndexPhenotypeBed` creates reusable
+phenotype indexes. `PrepareTransWindow` creates the locus dosage and joint
+phenotype inputs. `TransWindowMvSusie` processes one locus per workflow
+launch. It preprocesses expression, splicing, and protein data and fits one
+joint mvSuSiE model.
+
+## Index phenotype files once
+
+Run
+[`workflows/index_phenotype_bed.wdl`](../workflows/index_phenotype_bed.wdl)
+once for each source expression, splicing, and protein phenotype file. The
+input is a BED-like table with chromosome, zero-based start, half-open end,
+and phenotype ID in the first four columns. Sample columns follow these
+metadata columns. The input metadata names do not have to use canonical names.
+
+Each launch writes four outputs:
+
+- `indexed_phenotypes`: a coordinate-sorted BGZF phenotype file;
+- `phenotype_tbi`: its tabix index;
+- `phenotype_lookup`: a compressed table with phenotype ID and coordinates;
+- `index_qc`: row counts, sample counts, file sizes, and elapsed time.
+
+The index workflow uses the coordinates in the phenotype file. It does not
+use a GTF. Thus, the same workflow supports genes, splicing events, and
+proteins. Keep the four outputs for reuse across all fine-mapping windows.
 
 ## Prepare the window data
 
@@ -42,6 +63,42 @@ modality.
 The phenotype task uses the intersection of samples in the nonempty assay
 files. It reports the input, retained, and removed sample counts for each
 contributing assay. A missing modality does not reduce the sample set.
+
+### Use indexed phenotype access
+
+`PrepareTransWindow` has two optional companion inputs for each modality:
+
+```text
+expression_phenotypes_tbi       expression_phenotype_lookup
+splicing_phenotypes_tbi         splicing_phenotype_lookup
+protein_phenotypes_tbi          protein_phenotype_lookup
+```
+
+For indexed access, set the main modality phenotype input to the corresponding
+`indexed_phenotypes` output. Set its TBI input to `phenotype_tbi` and its
+lookup input to `phenotype_lookup`. Both companions must be present. The task
+stops with an error if only one companion is present.
+
+If both companions are absent, the task reads the complete phenotype file.
+This rule preserves existing input JSON files. It also permits mixed access.
+For example, expression and protein can use tabix while splicing uses a full
+scan.
+
+The task makes one batched tabix query per indexed, contributing modality. It
+then applies an exact phenotype-ID filter because nearby or overlapping
+intervals can add records to a coordinate query. Full-scan and tabix access
+use the same feature selection, sample intersection, output writer, and error
+checks.
+
+`window_qc.tsv` reports these access fields for each modality:
+
+```text
+access_method  lookup_seconds  query_seconds  parse_seconds  query_rows  modality_seconds
+```
+
+The task log also reports the requested, queried, and retained phenotype
+counts. Use these values to compare tabix and full-scan performance on the
+source data.
 
 ## Preprocess the joint data
 
@@ -142,6 +199,6 @@ checks both installed versions before it copies the pipeline scripts. GitHub
 Actions builds the image and runs small raw-input and prepared-window WDL
 smoke tests. Local smoke tests do not build the image.
 
-Both workflows use WDL 1.0. You can run them with MiniWDL or a
+All workflows use WDL 1.0. You can run them with MiniWDL or a
 Cromwell-compatible engine. Dockstore keeps the existing workflow names and
 descriptor paths.
