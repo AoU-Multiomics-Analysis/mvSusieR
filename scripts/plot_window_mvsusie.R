@@ -1,7 +1,14 @@
 #!/usr/bin/env Rscript
 
-source("scripts/trans_window_cli.R")
-source("scripts/trans_window_logging.R")
+script_file <- sub(
+  "^--file=",
+  "",
+  grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)[[1L]]
+)
+script_file <- gsub("~\\+~", " ", script_file)
+script_dir <- dirname(normalizePath(script_file))
+source(file.path(script_dir, "trans_window_cli.R"))
+source(file.path(script_dir, "trans_window_logging.R"))
 
 args <- parse_cli_args(
   option_list = list(

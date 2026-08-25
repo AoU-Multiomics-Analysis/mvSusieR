@@ -62,6 +62,19 @@ for script in \
   rg -q "scripts/${script}" "$workflow"
 done
 
+for entrypoint in \
+  prepare_window.R \
+  fit_window.R \
+  run_window_mvsusie.R \
+  summarize_window.R \
+  merge_window_outputs.R \
+  plot_window_mvsusie.R; do
+  if rg -q 'source[(]"scripts/' "scripts/${entrypoint}"; then
+    echo "${entrypoint} must resolve helpers relative to its own path." >&2
+    exit 1
+  fi
+done
+
 rg -q 'compute_marginal_bhat_shat_matrix' "$workflow"
 rg -q 'tests/test_trans_window_wdl_smoke[.]sh' "$workflow"
 rg -q 'python3 -m pip install miniwdl' "$workflow"

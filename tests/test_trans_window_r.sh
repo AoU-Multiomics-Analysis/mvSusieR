@@ -22,18 +22,20 @@ Rscript tests/test_mashr_prior.R
 input_dir="$tmp_dir/input"
 Rscript tests/fixtures/trans_window/generate_model_fixture.R "$input_dir"
 
-Rscript scripts/prepare_window.R \
-  --windows "$input_dir/windows.tsv" \
-  --window-phenotypes "$input_dir/window_phenotypes.tsv" \
-  --window-id w1 \
-  --dosage "$input_dir/model_dosage.tsv" \
-  --phenotype-files "$input_dir/model_phenotypes.tsv" \
-  --expression-covariates "$input_dir/model_expression_covariates.tsv" \
-  --splicing-covariates "$input_dir/model_splicing_covariates.tsv" \
-  --protein-covariates "$input_dir/model_protein_covariates.tsv" \
-  --covariate-provenance-output "$tmp_dir/standalone_covariate_provenance.tsv.gz" \
-  --output "$tmp_dir/standalone_prepared_window.rds" \
-  2>&1 | tee "$tmp_dir/prepare_window.log"
+(
+  cd "$tmp_dir"
+  Rscript "$repo_root/scripts/prepare_window.R" \
+    --windows "$input_dir/windows.tsv" \
+    --window-phenotypes "$input_dir/window_phenotypes.tsv" \
+    --window-id w1 \
+    --dosage "$input_dir/model_dosage.tsv" \
+    --phenotype-files "$input_dir/model_phenotypes.tsv" \
+    --expression-covariates "$input_dir/model_expression_covariates.tsv" \
+    --splicing-covariates "$input_dir/model_splicing_covariates.tsv" \
+    --protein-covariates "$input_dir/model_protein_covariates.tsv" \
+    --covariate-provenance-output "$tmp_dir/standalone_covariate_provenance.tsv.gz" \
+    --output "$tmp_dir/standalone_prepared_window.rds"
+) 2>&1 | tee "$tmp_dir/prepare_window.log"
 
 grep -q 'Reading genotype data' "$tmp_dir/prepare_window.log"
 grep -q 'Residualizing genotype and phenotype matrices' "$tmp_dir/prepare_window.log"
