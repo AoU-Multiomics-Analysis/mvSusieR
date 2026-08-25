@@ -23,6 +23,7 @@ printf '[%s] Running the raw-input WDL path.\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ'
 miniwdl run \
   -d "$tmp_dir/raw/." \
   -o "$tmp_dir/raw_outputs.json" \
+  --verbose \
   --no-color \
   --no-cache \
   workflows/trans_window_mvsusie.wdl \
@@ -47,6 +48,7 @@ printf '[%s] Running the prepared-window WDL path.\n' "$(date -u +'%Y-%m-%dT%H:%
 miniwdl run \
   -d "$tmp_dir/prepared/." \
   -o "$tmp_dir/prepared_outputs.json" \
+  --verbose \
   --no-color \
   --no-cache \
   workflows/trans_window_mvsusie.wdl \

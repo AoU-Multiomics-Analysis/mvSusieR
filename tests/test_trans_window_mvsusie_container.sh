@@ -66,6 +66,7 @@ rg -q 'compute_marginal_bhat_shat_matrix' "$workflow"
 rg -q 'tests/test_trans_window_wdl_smoke[.]sh' "$workflow"
 rg -q 'python3 -m pip install miniwdl' "$workflow"
 rg -q -- '--user "[$][(]id -u[)]:[$][(]id -g[)]"' tests/test_trans_window_wdl_smoke.sh
+test "$(rg -c -- '--verbose' tests/test_trans_window_wdl_smoke.sh)" -eq 2
 if rg -q 'miniwdl run workflows/trans_window_mvsusie[.]wdl' tests/test_trans_window_wdl_smoke.sh; then
   echo "MiniWDL runner options must precede the WDL path." >&2
   exit 1
