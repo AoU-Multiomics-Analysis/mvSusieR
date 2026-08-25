@@ -58,7 +58,8 @@ window per workflow launch. It can prepare raw genotype and phenotype inputs,
 or it can use an existing prepared-window RDS and start with model fitting. It
 uses any nonempty subset of expression, splicing, and protein outcomes in one
 joint model. It uses a PCA-derived mashr prior, a greedy component schedule,
-and fixed residual covariance. It writes variant PIPs, credible sets, feature
+and an estimated residual covariance. It lets mvSuSiE update the raw mashr
+prior scale and mixture weights. It writes variant PIPs, credible sets, feature
 support, API-scale effect plots, and window QC. See the [trans-window
 fine-mapping guide](docs/trans-window-fine-mapping.md).
 

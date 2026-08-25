@@ -51,7 +51,8 @@ The model workflow will not accept generic modality arrays. Its production defau
 - strong-row threshold lfsr of 0.05;
 - extreme deconvolution disabled;
 - canonical covariance matrices disabled;
-- fixed initial residual covariance;
+- residual covariance initialized with `cov(Y)` and then estimated;
+- prior scale and mixture weights estimated from the mashr initialization;
 - greedy start `L = 10`;
 - greedy step `5`;
 - maximum `L = 40`;
@@ -120,21 +121,19 @@ Prior learning uses this sequence:
 4. Call `mashr::cov_pca` with `npc = 5` on the selected rows and record the number of covariance matrices it returns.
 5. Fit the mash mixture weights on all SNP rows.
 6. Convert the fitted mixture to an mvSuSiE mixture prior with no canonical matrices and no extreme-deconvolution step.
-7. Keep the fitted mash mixture weights fixed in mvSuSiE.
+7. Use the fitted mash mixture weights to initialize mvSuSiE.
 
-For outcome `r`, the prior handoff computes
-
-`outcome_se[r] = sd(Y[, r]) / sqrt(number_of_finite_samples)`.
-
-For every mash covariance matrix `U`, the workflow passes
-
-`U_input[r, s] = U[r, s] / (outcome_se[r] * outcome_se[s])`.
-
-mvSuSiE then applies its internal outcome scale and restores the effective covariance to the raw mash covariance. The training bundle records the raw and converted covariance ranges, outcome standard-error vector, covariance-training rows, mixture-training row count, fitted weights, and random seed.
+The workflow passes the raw mash covariance matrices to mvSuSiE. It does not
+apply the outcome-scale conversion that is used for a fixed prior. The training
+bundle records the raw prior, raw covariance range, covariance-training rows,
+mixture-training row count, fitted weights, and random seed.
 
 ## Joint mvSuSiE model
 
-The workflow fixes the residual covariance at the sample covariance of the prepared joint outcome matrix. It disables prior-variance and prior-mixture-weight re-estimation. It uses the fitted mashr prior and prints every mvSuSiE iteration.
+The workflow initializes the residual covariance with the sample covariance of
+the prepared joint outcome matrix. It lets mvSuSiE update the residual
+covariance, raw mashr prior scale, and mixture weights. It prints every mvSuSiE
+iteration.
 
 The greedy scheduler is a pipeline function with separate `start_L`, `step_L`, and `max_L` arguments. It runs `L = 10, 15, 20, ...` and warm-starts each round from the preceding fit. A round is saturated when its minimum component log Bayes factor is below `1.0`. The scheduler stops at the first saturated round or at `L = 40`.
 
@@ -214,7 +213,12 @@ Tests use one synthetic joint fixture with expression, splicing, and protein out
 - explicit expression and splicing target outcomes;
 - a small genotype matrix with known covariate relationships.
 
-The R tests verify exact sample intersection and order, outcome keys, per-modality selection counts, correct phenotype residualization, genotype residualization against the full covariate union, phenotype unit variance, variant filtering, mash scale round-trip, fixed mixture weights, fixed residual covariance, greedy warm starts, the `1.0` stopping threshold, final-only fit storage, summary tables, and mvSuSiE API plot creation.
+The R tests verify exact sample intersection and order, outcome keys,
+per-modality selection counts, correct phenotype residualization, genotype
+residualization against the full covariate union, phenotype unit variance,
+variant filtering, the raw mashr prior handoff, enabled prior and residual
+updates, greedy warm starts, the `1.0` stopping threshold, final-only fit
+storage, summary tables, and mvSuSiE API plot creation.
 
 Negative tests verify rejection of an empty outcome set, `isoform_usage`, duplicate IDs, missing targets, mismatched covariate samples, and invalid greedy settings.
 

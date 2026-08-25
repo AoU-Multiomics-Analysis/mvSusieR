@@ -156,19 +156,19 @@ add extra covariance directions. It then fits the mash mixture on all retained
 SNPs.
 
 The workflow supplies only the PCA covariance matrices to mashr. It does not
-add another covariance family. It keeps the fitted mash mixture weights for
-mvSuSiE.
+add another covariance family. It uses the fitted mash mixture weights to
+initialize mvSuSiE.
 
-Before mvSuSiE uses the mash prior, the workflow divides each covariance
-element by the product of the corresponding outcome standard-error scales.
-This conversion cancels mvSuSiE's automatic outcome-scale conversion and
-preserves the mash effect covariance. It does not standardize the prior twice.
+The workflow passes the raw fitted mash covariance matrices to mvSuSiE. This
+handoff is required when mvSuSiE estimates the prior scale. The workflow does
+not apply the fixed-prior outcome-scale conversion.
 
 ## Fit mvSuSiE
 
 The workflow initializes the residual covariance with the covariance of the
-prepared outcome matrix and keeps it fixed. It also keeps the mash prior and
-mixture weights fixed. mvSuSiE runs with verbose output.
+prepared outcome matrix. mvSuSiE then updates the residual covariance, the raw
+mash prior scale, and the mash mixture weights. mvSuSiE runs with verbose
+output.
 
 The greedy schedule starts at `L = 10`, increases in steps of 5, and stops at
 `L = 40`. It stops earlier when the minimum component log Bayes factor is less
@@ -182,8 +182,8 @@ per round to `greedy_L_history.tsv`.
 For one window, the workflow writes scalar outputs:
 
 - the prepared joint-data bundle;
-- the mashr training bundle with `Bhat`, `Shat`, covariance inputs, and scale
-  information;
+- the mashr training bundle with `Bhat`, `Shat`, covariance inputs, and the raw
+  mash prior;
 - the final mvSuSiE fit;
 - the greedy-L history;
 - covariate provenance, run logs, and R session information;
