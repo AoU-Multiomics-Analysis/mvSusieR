@@ -50,15 +50,20 @@ column for each sample. The workflow writes one combined phenotype file and a
 manifest with these columns:
 
 ```text
-window_id  outcome_key  phenotype_id  modality  phenotype_file
+window_id  outcome_key  phenotype_id  modality  phenotype_file  p_value
 ```
 
 `outcome_key` has the form `modality::phenotype_id`. This key prevents name
-collisions between modalities. A window can retain any nonempty subset of the
-three supported modalities. A top-N value is a maximum, not a minimum. Thus,
-a modality can contribute fewer than N outcomes or no outcomes in a window.
-The workflow rejects a window only when it has no usable outcomes from any
-modality.
+collisions between modalities. `p_value` is the minimum window association P
+value for a selected trans feature. A target-only feature has a missing
+`p_value`. This one manifest is an input to both mvSuSiE and checkpointed
+univariate SuSiE. mvSuSiE uses all rows. Univariate SuSiE uses rows with a
+finite `p_value`.
+
+A window can retain any nonempty subset of the three supported modalities. A
+top-N value is a maximum, not a minimum. Thus, a modality can contribute fewer
+than N outcomes or no outcomes in a window. The workflow rejects a window only
+when it has no usable outcomes from any modality.
 
 The phenotype task uses the intersection of samples in the nonempty assay
 files. It reports the input, retained, and removed sample counts for each

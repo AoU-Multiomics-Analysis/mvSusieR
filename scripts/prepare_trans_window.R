@@ -769,7 +769,16 @@ prepare_trans_window_data <- function(
       modality = modality,
       phenotype_file = basename(phenotype_data_path)
     )
-  })
+  }) |>
+    left_join(
+      selected_trans |>
+        transmute(
+          modality = .data$modality,
+          phenotype_id = .data$molecular_trait_id,
+          p_value = .data$min_pval
+        ),
+      by = c("modality", "phenotype_id")
+    )
   if (anyDuplicated(manifest$outcome_key)) {
     stop("Joint phenotype outcome keys must be unique.", call. = FALSE)
   }
