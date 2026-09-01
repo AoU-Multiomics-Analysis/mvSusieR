@@ -145,7 +145,8 @@ stopifnot(
   identical(basename(result$window_qc), "w1.window_qc.tsv")
 )
 expected_columns <- c(
-  "window_id", "outcome_key", "phenotype_id", "modality", "phenotype_file"
+  "window_id", "outcome_key", "phenotype_id", "modality", "phenotype_file",
+  "p_value"
 )
 stopifnot(identical(names(manifest), expected_columns))
 expected_counts <- c(expression = 26L, splicing = 27L, protein = 15L)
@@ -157,6 +158,26 @@ stopifnot(identical(
 ))
 stopifnot(!anyDuplicated(manifest$outcome_key))
 stopifnot(all(manifest$phenotype_file == "w1.window_phenotypes.bed.gz"))
+trans_manifest <- manifest |>
+  filter(!grepl("target", .data$phenotype_id, fixed = TRUE))
+stopifnot(
+  all(is.finite(trans_manifest$p_value)),
+  isTRUE(all.equal(
+    manifest$p_value[manifest$outcome_key == "expression::expr_27"],
+    1e-29
+  )),
+  isTRUE(all.equal(
+    manifest$p_value[manifest$outcome_key == "splicing::splice_27"],
+    1e-29
+  )),
+  isTRUE(all.equal(
+    manifest$p_value[manifest$outcome_key == "protein::protein_17"],
+    1e-19
+  )),
+  all(is.na(manifest$p_value[grepl(
+    "target", manifest$phenotype_id, fixed = TRUE
+  )]))
+)
 stopifnot(all(c(
   "expression::expr_target",
   "splicing::splice_target_1",
@@ -262,7 +283,15 @@ overlap_manifest <- read_tsv(
   overlap_result$window_phenotypes,
   show_col_types = FALSE
 )
-stopifnot(sum(overlap_manifest$outcome_key == "expression::expr_27") == 1L)
+stopifnot(
+  sum(overlap_manifest$outcome_key == "expression::expr_27") == 1L,
+  isTRUE(all.equal(
+    overlap_manifest$p_value[
+      overlap_manifest$outcome_key == "expression::expr_27"
+    ],
+    1e-29
+  ))
+)
 
 missing_modality <- trans_associations |>
   filter(.data$modality != "protein")
