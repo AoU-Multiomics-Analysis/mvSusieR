@@ -119,6 +119,16 @@ stopifnot(identical(prior_fit$Bhat, Bhat))
 stopifnot(identical(prior_fit$Shat, Shat))
 stopifnot(length(prior_fit$fitted_weights) >= 1L)
 stopifnot(abs(sum(prior_fit$fitted_weights) - 1) < 1e-8)
+estimated_null_weight <- unname(as.numeric(prior_fit$fitted_g$pi[[1L]]))
+stopifnot(
+  is.finite(estimated_null_weight),
+  estimated_null_weight > 0,
+  estimated_null_weight < 1,
+  identical(
+    unname(as.numeric(prior_fit$raw_prior$null_weight)),
+    estimated_null_weight
+  )
+)
 stopifnot(any(grepl("one-by-one", prior_messages, fixed = TRUE)))
 stopifnot(any(grepl("PCA covariance", prior_messages, fixed = TRUE)))
 stopifnot(any(grepl("mashr mixture", prior_messages, fixed = TRUE)))

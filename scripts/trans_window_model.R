@@ -82,6 +82,14 @@ validate_prior_for_outcomes <- function(prior, n_outcomes) {
   }
   validate_mashr_covariances(prior$xUlist, n_outcomes)
   if (
+    length(prior$null_weight) != 1L ||
+    !is.numeric(prior$null_weight) || is.na(prior$null_weight) ||
+    !is.finite(prior$null_weight) ||
+    prior$null_weight < 0 || prior$null_weight > 1
+  ) {
+    stop("The mvSuSiE prior has an invalid null weight.", call. = FALSE)
+  }
+  if (
     length(prior$pi) != length(prior$xUlist) ||
     any(!is.finite(prior$pi)) || any(prior$pi < 0) ||
     abs(sum(prior$pi) - 1) > 1e-8
@@ -280,6 +288,13 @@ fit_window_mvsusie <- function(prepared, config) {
     verbose = TRUE
   )
   fit <- scheduled$fit
+  if (
+    length(fit$null_weight) != 1L || is.na(fit$null_weight) ||
+    !is.finite(fit$null_weight) ||
+    fit$null_weight < 0 || fit$null_weight > 1
+  ) {
+    stop("The final mvSuSiE null weight is invalid.", call. = FALSE)
+  }
   pipeline_log(sprintf(
     "Final mvSuSiE fit completed at L = %d after %d iterations.",
     nrow(fit$alpha), fit$niter
@@ -308,6 +323,9 @@ fit_window_mvsusie <- function(prepared, config) {
       prior_mixture_weights_mode = "updated_from_mashr",
       prior_variance_mode = "updated_from_raw_mashr",
       prior_scale_conversion = "none_raw_mashr",
+      null_weight_mode = "updated_from_mashr",
+      initial_null_weight = raw_prior$null_weight,
+      final_null_weight = fit$null_weight,
       residual_variance_mode = "updated_from_initial_covariance",
       mvsusieR_version = as.character(utils::packageVersion("mvsusieR")),
       config = config,

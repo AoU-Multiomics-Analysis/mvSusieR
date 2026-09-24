@@ -202,6 +202,12 @@ stopifnot(identical(fit$metadata$covariance_training_scope, "strong_snps_in_wind
 stopifnot(identical(fit$metadata$prior_mixture_weights_mode, "updated_from_mashr"))
 stopifnot(identical(fit$metadata$prior_variance_mode, "updated_from_raw_mashr"))
 stopifnot(identical(fit$metadata$prior_scale_conversion, "none_raw_mashr"))
+stopifnot(identical(fit$metadata$null_weight_mode, "updated_from_mashr"))
+stopifnot(is.finite(fit$metadata$initial_null_weight))
+stopifnot(fit$metadata$initial_null_weight > 0)
+stopifnot(is.finite(fit$metadata$final_null_weight))
+stopifnot(fit$metadata$final_null_weight >= 0)
+stopifnot(fit$metadata$final_null_weight <= 1)
 stopifnot(identical(fit$metadata$covariance_input_method, "pca_only"))
 stopifnot(nrow(fit$fit$alpha) == 10L)
 stopifnot(identical(fit$metadata$L_final, 10L))
@@ -246,6 +252,11 @@ stopifnot(identical(mashr_training$pca_requested, 5L))
 stopifnot(identical(mashr_training$covariance_input_method, "pca_only"))
 stopifnot(inherits(mashr_training$raw_prior, "mash_prior"))
 stopifnot(is.null(mashr_training$converted_prior))
+stopifnot(isTRUE(all.equal(
+  unname(as.numeric(mashr_training$raw_prior$null_weight)),
+  unname(as.numeric(mashr_training$fitted_g$pi[[1L]])),
+  tolerance = 0
+)))
 RS
 
 echo "Task 4 entrypoint tests passed"

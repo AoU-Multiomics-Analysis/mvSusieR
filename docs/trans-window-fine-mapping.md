@@ -157,7 +157,8 @@ SNPs.
 
 The workflow supplies only the PCA covariance matrices to mashr. It does not
 add another covariance family. It uses the fitted mash mixture weights to
-initialize mvSuSiE.
+initialize mvSuSiE. It also preserves mashr's fitted point-mass weight as the
+initial mvSuSiE null weight.
 
 The workflow passes the raw fitted mash covariance matrices to mvSuSiE. This
 handoff is required when mvSuSiE estimates the prior scale. The workflow does
@@ -167,8 +168,8 @@ not apply the fixed-prior outcome-scale conversion.
 
 The workflow initializes the residual covariance with the covariance of the
 prepared outcome matrix. mvSuSiE then updates the residual covariance, the raw
-mash prior scale, and the mash mixture weights. mvSuSiE runs with verbose
-output.
+mash prior scale, the mash mixture weights, and the null weight. mvSuSiE runs
+with verbose output.
 
 The greedy schedule starts at `L = 10`, increases in steps of 5, and stops at
 `L = 40`. It stops earlier when the minimum component log Bayes factor is less

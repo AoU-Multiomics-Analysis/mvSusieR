@@ -322,15 +322,12 @@ learn_joint_mashr_prior <- function(
     "The mashr mixture fit completed in %.2f seconds.",
     proc.time()[["elapsed"]] - stage_time
   ))
-  prior <- mvsusieR::create_mixture_prior(
-    fitted_g = mash_fit$fitted_g,
-    null_weight = 0
-  )
+  prior <- mvsusieR::create_mixture_prior(fitted_g = mash_fit$fitted_g)
   fallback_to_input_covariances <- FALSE
   if (!length(prior$xUlist)) {
     prior <- mvsusieR::create_mixture_prior(
       mixture_prior = list(matrices = pca_covariances),
-      null_weight = 0,
+      null_weight = unname(as.numeric(mash_fit$fitted_g$pi[[1L]])),
       weights_tol = 0
     )
     fallback_to_input_covariances <- TRUE

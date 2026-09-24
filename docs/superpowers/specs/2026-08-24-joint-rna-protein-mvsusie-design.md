@@ -52,7 +52,8 @@ The model workflow will not accept generic modality arrays. Its production defau
 - extreme deconvolution disabled;
 - canonical covariance matrices disabled;
 - residual covariance initialized with `cov(Y)` and then estimated;
-- prior scale and mixture weights estimated from the mashr initialization;
+- prior scale, mixture weights, and null weight estimated from the mashr
+  initialization;
 - greedy start `L = 10`;
 - greedy step `5`;
 - maximum `L = 40`;
@@ -121,7 +122,8 @@ Prior learning uses this sequence:
 4. Call `mashr::cov_pca` with `npc = 5` on the selected rows and record the number of covariance matrices it returns.
 5. Fit the mash mixture weights on all SNP rows.
 6. Convert the fitted mixture to an mvSuSiE mixture prior with no canonical matrices and no extreme-deconvolution step.
-7. Use the fitted mash mixture weights to initialize mvSuSiE.
+7. Use the fitted mash mixture weights and point-mass weight to initialize
+   mvSuSiE.
 
 The workflow passes the raw mash covariance matrices to mvSuSiE. It does not
 apply the outcome-scale conversion that is used for a fixed prior. The training
@@ -132,8 +134,8 @@ mixture-training row count, fitted weights, and random seed.
 
 The workflow initializes the residual covariance with the sample covariance of
 the prepared joint outcome matrix. It lets mvSuSiE update the residual
-covariance, raw mashr prior scale, and mixture weights. It prints every mvSuSiE
-iteration.
+covariance, raw mashr prior scale, mixture weights, and null weight. It prints
+every mvSuSiE iteration.
 
 The greedy scheduler is a pipeline function with separate `start_L`, `step_L`, and `max_L` arguments. It runs `L = 10, 15, 20, ...` and warm-starts each round from the preceding fit. A round is saturated when its minimum component log Bayes factor is below `1.0`. The scheduler stops at the first saturated round or at `L = 40`.
 
