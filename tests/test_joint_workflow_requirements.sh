@@ -57,9 +57,14 @@ rg -q 'covariance_input_method <- "pca_only"' "$prior_script"
 rg -q 'covariance_input_method <- "univariate_pca_equivalent"' "$prior_script"
 rg -q 'prior[$]xUlist <- lapply' "$prior_script"
 rg -q 'U / automatic_scale' "$prior_script"
-rg -q 'estimate_residual_variance = FALSE' "$model_script"
-rg -q 'estimate_prior_variance = FALSE' "$model_script"
-rg -q 'estimate_prior_mixture_weights = FALSE' "$model_script"
+rg -q 'prior = update_spec[$]prior_variance' "$model_script"
+rg -q 'estimate_residual_variance = update_spec[$]estimate_residual_variance' "$model_script"
+rg -q 'estimate_prior_variance = update_spec[$]estimate_prior_variance' "$model_script"
+rg -q 'estimate_prior_mixture_weights = update_spec[$]estimate_prior_mixture_weights' "$model_script"
+if rg -q 'prepare_mashr_prior_for_mvsusie' "$model_script"; then
+  echo "The model must pass the raw mashr prior when mvSuSiE updates its scale." >&2
+  exit 1
+fi
 rg -q 'verbose = TRUE' "$model_script"
 rg -q 'covariance_input_method = mashr_training[$]covariance_input_method' "$model_script"
 

@@ -98,7 +98,8 @@ Rscript scripts/fit_window.R \
 
 grep -q 'Reading prepared window data' "$tmp_dir/fit_window.log"
 grep -q 'Computing the all-SNP cross-product' "$tmp_dir/fit_window.log"
-grep -q 'Using fixed mashr weights' "$tmp_dir/fit_window.log"
+grep -q 'Using the raw mashr prior and updating its scale and mixture weights' "$tmp_dir/fit_window.log"
+grep -q 'Estimating the residual covariance from its outcome covariance initialization' "$tmp_dir/fit_window.log"
 
 Rscript scripts/summarize_window.R \
   --prepared "$tmp_dir/standalone_prepared_window.rds" \
@@ -198,7 +199,15 @@ fit <- readRDS(args[[1L]])
 stopifnot(identical(fit$metadata$prior, "mashr_pca_only"))
 stopifnot(identical(fit$metadata$mash_model_training_scope, "all_snps_in_window"))
 stopifnot(identical(fit$metadata$covariance_training_scope, "strong_snps_in_window"))
-stopifnot(identical(fit$metadata$prior_mixture_weights_mode, "fixed_from_mashr"))
+stopifnot(identical(fit$metadata$prior_mixture_weights_mode, "updated_from_mashr"))
+stopifnot(identical(fit$metadata$prior_variance_mode, "updated_from_raw_mashr"))
+stopifnot(identical(fit$metadata$prior_scale_conversion, "none_raw_mashr"))
+stopifnot(identical(fit$metadata$null_weight_mode, "updated_from_mashr"))
+stopifnot(is.finite(fit$metadata$initial_null_weight))
+stopifnot(fit$metadata$initial_null_weight > 0)
+stopifnot(is.finite(fit$metadata$final_null_weight))
+stopifnot(fit$metadata$final_null_weight >= 0)
+stopifnot(fit$metadata$final_null_weight <= 1)
 stopifnot(identical(fit$metadata$covariance_input_method, "pca_only"))
 stopifnot(nrow(fit$fit$alpha) == 10L)
 stopifnot(identical(fit$metadata$L_final, 10L))
@@ -214,18 +223,23 @@ prepared <- readRDS(args[[2L]])
 stopifnot(identical(fit$metadata$prior, "mashr_pca_only"))
 stopifnot(identical(fit$metadata$mash_model_training_scope, "all_snps_in_window"))
 stopifnot(identical(fit$metadata$covariance_training_scope, "strong_snps_in_window"))
-stopifnot(identical(fit$metadata$prior_mixture_weights_mode, "fixed_from_mashr"))
+stopifnot(identical(fit$metadata$prior_mixture_weights_mode, "updated_from_mashr"))
+stopifnot(identical(fit$metadata$prior_variance_mode, "updated_from_raw_mashr"))
+stopifnot(identical(fit$metadata$prior_scale_conversion, "none_raw_mashr"))
 stopifnot(identical(fit$metadata$covariance_input_method, "pca_only"))
-stopifnot(identical(fit$metadata$residual_variance_mode, "fixed_initial_covariance"))
+stopifnot(identical(
+  fit$metadata$residual_variance_mode,
+  "updated_from_initial_covariance"
+))
 stopifnot(nrow(fit$fit$alpha) == 10L)
 stopifnot(identical(fit$metadata$config$start_L, 10L))
 stopifnot(identical(fit$metadata$config$step_L, 5L))
 stopifnot(identical(fit$metadata$config$max_L, 10L))
 stopifnot(identical(fit$metadata$config$greedy_lbf_cutoff, 1e6))
-stopifnot(isTRUE(all.equal(
+stopifnot(!isTRUE(all.equal(
   fit$fit$sigma2,
   stats::cov(prepared$Y),
-  tolerance = 1e-10
+  tolerance = 1e-8
 )))
 RS
 
@@ -236,6 +250,13 @@ stopifnot(identical(dim(mashr_training$Bhat), c(12L, 6L)))
 stopifnot(identical(dim(mashr_training$Shat), c(12L, 6L)))
 stopifnot(identical(mashr_training$pca_requested, 5L))
 stopifnot(identical(mashr_training$covariance_input_method, "pca_only"))
+stopifnot(inherits(mashr_training$raw_prior, "mash_prior"))
+stopifnot(is.null(mashr_training$converted_prior))
+stopifnot(isTRUE(all.equal(
+  unname(as.numeric(mashr_training$raw_prior$null_weight)),
+  unname(as.numeric(mashr_training$fitted_g$pi[[1L]])),
+  tolerance = 0
+)))
 RS
 
 echo "Task 4 entrypoint tests passed"

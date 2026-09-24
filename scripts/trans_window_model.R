@@ -82,13 +82,45 @@ validate_prior_for_outcomes <- function(prior, n_outcomes) {
   }
   validate_mashr_covariances(prior$xUlist, n_outcomes)
   if (
+    length(prior$null_weight) != 1L ||
+    !is.numeric(prior$null_weight) || is.na(prior$null_weight) ||
+    !is.finite(prior$null_weight) ||
+    prior$null_weight < 0 || prior$null_weight > 1
+  ) {
+    stop("The mvSuSiE prior has an invalid null weight.", call. = FALSE)
+  }
+  if (
     length(prior$pi) != length(prior$xUlist) ||
     any(!is.finite(prior$pi)) || any(prior$pi < 0) ||
     abs(sum(prior$pi) - 1) > 1e-8
   ) {
-    stop("The mvSuSiE prior has invalid fixed mixture weights.", call. = FALSE)
+    stop("The mvSuSiE prior has invalid mixture weights.", call. = FALSE)
   }
   invisible(TRUE)
+}
+
+make_mvsusie_update_spec <- function(raw_prior, Y) {
+  if (!is.matrix(Y) || nrow(Y) < 2L || ncol(Y) < 1L || any(!is.finite(Y))) {
+    stop("Y must be a finite matrix with at least two rows.", call. = FALSE)
+  }
+  validate_prior_for_outcomes(raw_prior, ncol(Y))
+  if (!is.null(attr(raw_prior, "mvsusie_outcome_se_scale"))) {
+    stop(
+      "Use the raw mashr prior when mvSuSiE updates the prior scale.",
+      call. = FALSE
+    )
+  }
+  residual_variance <- stats::cov(Y)
+  if (any(!is.finite(residual_variance))) {
+    stop("The initial residual covariance contains non-finite values.", call. = FALSE)
+  }
+  list(
+    prior_variance = raw_prior,
+    residual_variance = residual_variance,
+    estimate_residual_variance = TRUE,
+    estimate_prior_variance = TRUE,
+    estimate_prior_mixture_weights = TRUE
+  )
 }
 
 supported_component_count <- function(single_effect_lfsr, fitted_L) {
@@ -226,38 +258,27 @@ fit_window_mvsusie <- function(prepared, config) {
   raw_prior <- mashr_training$raw_prior
   validate_prior_for_outcomes(raw_prior, ncol(prepared$Y))
   raw_covariance_values <- unlist(raw_prior$xUlist, use.names = FALSE)
-  prepared_prior <- prepare_mashr_prior_for_mvsusie(raw_prior, prepared$Y)
-  validate_prior_for_outcomes(prepared_prior, ncol(prepared$Y))
-  converted_covariance_values <- unlist(
-    prepared_prior$xUlist,
-    use.names = FALSE
-  )
-  outcome_se <- attr(prepared_prior, "mvsusie_outcome_se_scale")
-  mashr_training$converted_prior <- prepared_prior
-  mashr_training$outcome_se <- outcome_se
   mashr_training$raw_covariance_range <- range(raw_covariance_values)
-  mashr_training$converted_covariance_range <- range(converted_covariance_values)
-
-  residual_variance <- stats::cov(prepared$Y)
-  if (any(!is.finite(residual_variance))) {
-    stop("The initial residual covariance contains non-finite values.", call. = FALSE)
-  }
-  pipeline_log("Using fixed mashr weights and the fixed initial residual covariance.")
+  update_spec <- make_mvsusie_update_spec(raw_prior, prepared$Y)
+  pipeline_log("Using the raw mashr prior and updating its scale and mixture weights.")
+  pipeline_log(
+    "Estimating the residual covariance from its outcome covariance initialization."
+  )
   pipeline_log("Starting mvSuSiE with verbose iteration output.")
   scheduled <- fit_mvsusie_greedy_schedule(
     X = prepared$X,
     Y = prepared$Y,
-    prior = prepared_prior,
+    prior = update_spec$prior_variance,
     start_L = config$start_L,
     step_L = config$step_L,
     max_L = config$max_L,
     greedy_lbf_cutoff = config$greedy_lbf_cutoff,
-    residual_variance = residual_variance,
+    residual_variance = update_spec$residual_variance,
     standardize = TRUE,
     intercept = FALSE,
-    estimate_residual_variance = FALSE,
-    estimate_prior_variance = FALSE,
-    estimate_prior_mixture_weights = FALSE,
+    estimate_residual_variance = update_spec$estimate_residual_variance,
+    estimate_prior_variance = update_spec$estimate_prior_variance,
+    estimate_prior_mixture_weights = update_spec$estimate_prior_mixture_weights,
     coverage = config$coverage,
     min_abs_corr = config$min_abs_corr,
     precompute_cache = TRUE,
@@ -267,6 +288,13 @@ fit_window_mvsusie <- function(prepared, config) {
     verbose = TRUE
   )
   fit <- scheduled$fit
+  if (
+    length(fit$null_weight) != 1L || is.na(fit$null_weight) ||
+    !is.finite(fit$null_weight) ||
+    fit$null_weight < 0 || fit$null_weight > 1
+  ) {
+    stop("The final mvSuSiE null weight is invalid.", call. = FALSE)
+  }
   pipeline_log(sprintf(
     "Final mvSuSiE fit completed at L = %d after %d iterations.",
     nrow(fit$alpha), fit$niter
@@ -279,7 +307,7 @@ fit_window_mvsusie <- function(prepared, config) {
     metadata = list(
       window_id = prepared$qc$window_id,
       prior = "mashr_pca_only",
-      prior_components = length(prepared_prior$xUlist),
+      prior_components = length(raw_prior$xUlist),
       pca_requested = mashr_training$pca_requested,
       pca_used = mashr_training$pca_used,
       pca_returned = mashr_training$pca_returned,
@@ -292,11 +320,13 @@ fit_window_mvsusie <- function(prepared, config) {
       covariance_selection_fallback_used =
         mashr_training$covariance_selection_fallback_used,
       covariance_input_method = mashr_training$covariance_input_method,
-      prior_mixture_weights_mode = "fixed_from_mashr",
-      prior_scale_conversion = "preserve_mashr_effect_covariance",
-      prior_outcome_se_min = min(outcome_se),
-      prior_outcome_se_max = max(outcome_se),
-      residual_variance_mode = "fixed_initial_covariance",
+      prior_mixture_weights_mode = "updated_from_mashr",
+      prior_variance_mode = "updated_from_raw_mashr",
+      prior_scale_conversion = "none_raw_mashr",
+      null_weight_mode = "updated_from_mashr",
+      initial_null_weight = raw_prior$null_weight,
+      final_null_weight = fit$null_weight,
+      residual_variance_mode = "updated_from_initial_covariance",
       mvsusieR_version = as.character(utils::packageVersion("mvsusieR")),
       config = config,
       L_final = as.integer(nrow(fit$alpha)),

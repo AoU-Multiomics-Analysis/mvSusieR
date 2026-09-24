@@ -426,6 +426,32 @@ stopifnot(!any(c(
   "marginal_output"
 ) %in% names(config)))
 
+update_test_Y <- matrix(rnorm(60L), nrow = 20L, ncol = 3L)
+raw_update_prior <- mvsusieR::create_mixture_prior(R = 3L, null_weight = 0)
+raw_update_prior$xUlist <- lapply(raw_update_prior$xUlist, `*`, 7)
+update_spec <- make_mvsusie_update_spec(raw_update_prior, update_test_Y)
+stopifnot(
+  identical(update_spec$prior_variance, raw_update_prior),
+  isTRUE(all.equal(
+    update_spec$residual_variance,
+    stats::cov(update_test_Y),
+    tolerance = 1e-12
+  )),
+  isTRUE(update_spec$estimate_residual_variance),
+  isTRUE(update_spec$estimate_prior_variance),
+  isTRUE(update_spec$estimate_prior_mixture_weights)
+)
+converted_update_prior <- raw_update_prior
+attr(converted_update_prior, "mvsusie_outcome_se_scale") <- rep(1, 3L)
+converted_prior_error <- tryCatch(
+  make_mvsusie_update_spec(converted_update_prior, update_test_Y),
+  error = identity
+)
+stopifnot(
+  inherits(converted_prior_error, "error"),
+  grepl("raw mashr prior", conditionMessage(converted_prior_error), fixed = TRUE)
+)
+
 model_X <- matrix(rnorm(50L * 20L), nrow = 50L, ncol = 20L)
 model_Y <- matrix(rnorm(50L * 3L), nrow = 50L, ncol = 3L)
 recorded_L <- integer()
